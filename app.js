@@ -175,7 +175,7 @@ const WP_TYPES = { vehicle: ['Vehicle', '#1d4ed8'], camp: ['Camp / hut', '#0d948
 /* ---------------- state ---------------- */
 const state = {
   base: LS.get('base', 'topo'),
-  vis: Object.assign({ pcl: true, hunt: true, paa: true, priv: true, parcels: true, pest: true, access: true, wps: true, huts: true, routes: true, log: true, hill: false, slope: false, sun: false }, LS.get('vis', {})),
+  vis: Object.assign({ pcl: true, hunt: true, paa: true, priv: true, parcels: true, pest: true, access: true, wps: true, huts: true, routes: true, log: true, hill: false, slope: false, sun: false, heat: true }, LS.get('vis', {})),
   strength: LS.get('strength', 1), fade: LS.get('fade', 0),
   sp: LS.get('sp', {}),
   alerts: LS.get('alerts', true),
@@ -303,6 +303,7 @@ function addOverlays() {
   const src = id => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: (state.loaded[id] && state.loaded[id].fc) || EMPTY }); };
   LAYERS.forEach(L => src(L.id));
   ['sel', 'acc', 'tline', 'wps', 'priv', 'arc', 'scent', 'rte', 'routes', 'trk', 'log'].forEach(src);
+  if (!map.getSource('hot')) map.addSource('hot', { type: 'geojson', data: hotFC() });
   const rsrc = (id, tiles, maxzoom) => { if (!map.getSource(id)) map.addSource(id, { type: 'raster', tiles: [tiles], tileSize: 256, maxzoom }); };
   rsrc('hill', hillURL(), 15); rsrc('slope', 'terrain://{z}/{x}/{y}?m=slope', 14); rsrc('sun', 'terrain://{z}/{x}/{y}?m=sun', 14);
   if (!map.getSource('fade')) map.addSource('fade', { type: 'geojson', data: WORLD });
@@ -355,9 +356,16 @@ function addOverlays() {
   add({ id: 'rte-c', type: 'circle', source: 'rte', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': '#ff6a13', 'circle-stroke-width': 2 } });
   add({ id: 'huts-c', type: 'circle', source: 'huts', minzoom: 9, paint: { 'circle-radius': 6, 'circle-color': '#b91c1c', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   add({ id: 'camps-c', type: 'circle', source: 'camps', minzoom: 9, paint: { 'circle-radius': 6, 'circle-color': '#0f766e', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+  add({ id: 'hot-h', type: 'heatmap', source: 'hot', maxzoom: 14, paint: {
+    'heatmap-weight': ['get', 'w'],
+    'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 9, 1.3],
+    'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 4, ['*', 16, ['get', 's']], 7, ['*', 40, ['get', 's']], 10, ['*', 115, ['get', 's']], 13, ['*', 330, ['get', 's']]],
+    'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(255,255,178,0)', 0.15, 'rgba(254,217,118,0.55)', 0.4, 'rgba(253,141,60,0.7)', 0.7, 'rgba(240,59,32,0.8)', 1, 'rgba(189,0,38,0.88)'],
+    'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.85, 13, 0.3] } });
+  add({ id: 'hot-c', type: 'circle', source: 'hot', minzoom: 7, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 5, 12, 9], 'circle-color': '#bd0026', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2, 'circle-opacity': 0.9 } });
   add({ id: 'log-c', type: 'circle', source: 'log', paint: { 'circle-radius': 6, 'circle-color': ['match', ['get', 'kind'], 'kill', '#be123c', '#f59e0b'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
   add({ id: 'wps-c', type: 'circle', source: 'wps', paint: { 'circle-radius': 7, 'circle-color': ['get', 'colour'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
-  applyVisibility(); renderWps(); renderRoutes(); renderLog(); updateAcc(); updateTargetLine(); computePriv();
+  applyVisibility(); updateHeat(); renderWps(); renderRoutes(); renderLog(); updateAcc(); updateTargetLine(); computePriv();
 }
 map.on('style.load', addOverlays);
 
@@ -481,7 +489,7 @@ map.on('click', e => {
   const p = [e.lngLat.lng, e.lngLat.lat];
   if (state.mode === 'route') { routeAdd(p); return; }
   if (state.mode === 'arc') { state.mode = null; arc.brg = bearing(arc.p, p); runArc(); return; }
-  const ids = ['huts-c', 'camps-c', 'log-c'].filter(id => map.getLayer(id) && map.getLayoutProperty(id, 'visibility') !== 'none');
+  const ids = ['hot-c', 'huts-c', 'camps-c', 'log-c'].filter(id => map.getLayer(id) && map.getLayoutProperty(id, 'visibility') !== 'none');
   const box = [[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]];
   const fs = ids.length ? map.queryRenderedFeatures(box, { layers: ids }) : [];
   if (fs.length) { featureSheet(fs[0]); return; }
@@ -765,7 +773,8 @@ function layersSheet() {
     ${tg('slope', 'Slope steepness', '#f97316', 'Zoom 10+. Yellow 25°+, orange 30°+, red 35°+, purple 45°+')}
     ${tg('sun', 'Sunny north faces', '#facc15', 'Zoom 10+. Yellow: north-facing (warm, often winter feed). Blue: shady south faces')}
     <h3>Animals (DOC distribution)</h3>
-    <div class="btnrow"><button class="btn small" data-act="spPreset">Deer, goats &amp; pigs</button><button class="btn small ghost" data-act="spNone">Clear</button></div>
+    <div class="btnrow"><button class="btn small" data-act="spPreset">Deer, goats &amp; pigs</button><button class="btn small ghost" data-act="spNone">Clear</button><button class="btn small ghost" data-act="hotList">Best public areas</button></div>
+    ${tg('heat', 'Hotspot heatmap for ticked species', '#f03b20', 'Where DOC and hunters rate public land best. Tap a red dot for details')}
     ${SPECIES.map(sp).join('')}
     <p class="sub">Tip: an orange road strip with no road drawn on the basemap is probably a paper road. Check it on Aerial.</p>`, { tall: true, kind: 'layers' });
 }
@@ -781,12 +790,12 @@ actions.base = b => {
 };
 sheetBody.addEventListener('change', e => {
   const i = e.target; if (!i.dataset || !i.dataset.act) return;
-  if (i.dataset.act === 'vis') { state.vis[i.dataset.k] = i.checked; LS.set('vis', state.vis); applyVisibility(); scheduleRefresh(); schedulePriv(); }
-  if (i.dataset.act === 'sp') { state.sp[i.dataset.k] = i.checked; LS.set('sp', state.sp); applyVisibility(); scheduleRefresh(); }
+  if (i.dataset.act === 'vis') { state.vis[i.dataset.k] = i.checked; LS.set('vis', state.vis); applyVisibility(); updateHeat(); scheduleRefresh(); schedulePriv(); }
+  if (i.dataset.act === 'sp') { state.sp[i.dataset.k] = i.checked; LS.set('sp', state.sp); applyVisibility(); updateHeat(); scheduleRefresh(); }
   if (i.dataset.act === 'alerts') { state.alerts = i.checked; LS.set('alerts', state.alerts); }
 });
-actions.spPreset = () => { SPECIES.forEach(s => { state.sp[s.key] = ['red', 'fallow', 'sika', 'goat', 'pig'].includes(s.key); }); LS.set('sp', state.sp); applyVisibility(); scheduleRefresh(); layersSheet(); };
-actions.spNone = () => { state.sp = {}; LS.set('sp', state.sp); applyVisibility(); layersSheet(); };
+actions.spPreset = () => { SPECIES.forEach(s => { state.sp[s.key] = ['red', 'fallow', 'sika', 'goat', 'pig'].includes(s.key); }); LS.set('sp', state.sp); applyVisibility(); updateHeat(); scheduleRefresh(); layersSheet(); };
+actions.spNone = () => { state.sp = {}; LS.set('sp', state.sp); applyVisibility(); updateHeat(); layersSheet(); };
 $('#btnLayers').onclick = () => (sheetKind === 'layers' && !sheet.hidden ? closeSheet() : layersSheet());
 
 /* ---------------- access directory ---------------- */
@@ -1120,7 +1129,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.3 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.4 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -1198,6 +1207,54 @@ function netChip() { const c = $('#netChip'); c.textContent = online() ? 'Online
 window.addEventListener('online', () => { netChip(); state.loaded = {}; scheduleRefresh(); });
 window.addEventListener('offline', () => { netChip(); state.loaded = {}; scheduleRefresh(); toast('Offline — using saved areas'); });
 netChip();
+
+/* ================= hotspot heatmap ================= */
+const HOT = window.HOTSPOTS || [];
+function hotFC() {
+  const f = [];
+  for (const h of HOT) for (const [sp, r] of Object.entries(h.sp)) h.pts.forEach(pt => f.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [pt[1], pt[0]] }, properties: { id: h.id, sp, w: r / 3, s: h.size === 2 ? 1.6 : 1 } }));
+  return { type: 'FeatureCollection', features: f };
+}
+const selSpecies = () => SPECIES.filter(s => state.sp[s.key]).map(s => s.key);
+function updateHeat() {
+  if (!map.getLayer('hot-h')) return;
+  const sel = selSpecies(), on = state.vis.heat && sel.length > 0;
+  const filt = ['in', ['get', 'sp'], ['literal', sel.length ? sel : ['none']]];
+  for (const id of ['hot-h', 'hot-c']) { map.setFilter(id, filt); map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); }
+}
+const stars = n => '●'.repeat(n) + '○'.repeat(3 - n);
+const RATE = ['', 'present / low', 'moderate / popular', 'high numbers'];
+function hotSheet(id) {
+  const h = HOT.find(x => x.id === id); if (!h) return;
+  const sel = selSpecies();
+  const rows = Object.entries(h.sp).sort((a, b) => (sel.includes(b[0]) - sel.includes(a[0])) || b[1] - a[1])
+    .map(([k, r]) => `<li><span class="t">${esc(spName(k))}</span> <span style="color:#bd0026;letter-spacing:2px">${stars(r)}</span> <span class="sub">${RATE[r]}</span></li>`).join('');
+  showSheet(`<h2>${esc(h.name)}</h2><p class="sub">${esc(h.region)} · public land hotspot</p>
+    <ul class="list">${rows}</ul>
+    <p>${esc(h.note)}</p>
+    <dl class="kv"><dt>Access</dt><dd>${esc(h.access)}</dd></dl>
+    <div class="btnrow"><button class="btn" data-act="hotGo" data-id="${h.id}">Zoom to area</button><a class="btn ghost" href="${LINKS.docPermit}" target="_blank" rel="noopener">DOC permit</a><button class="btn ghost" data-act="hotList">All hotspots</button></div>
+    <h3>Sources</h3><ul class="sub">${h.src.map(u => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60))}…</a></li>`).join('')}</ul>
+    <p class="sub">${esc(window.HOTSPOT_NOTE || '')}</p>`, { kind: 'hot' });
+}
+function hotList(spKey) {
+  const sel = selSpecies(), key = spKey || sel[0] || 'red';
+  const opts = SPECIES.map(s => `<button class="btn small ${s.key === key ? '' : 'ghost'}" data-act="hotListSp" data-k="${s.key}">${esc(s.label)}</button>`).join('');
+  const ranked = HOT.filter(h => h.sp[key]).sort((a, b) => b.sp[key] - a.sp[key] || b.size - a.size);
+  showSheet(`<h2>Best public land: ${esc(spName(key))}</h2>
+    <div class="btnrow" style="flex-wrap:wrap">${opts}</div>
+    <ul class="list">${ranked.map(h => `<li><button class="btn ghost small" style="float:right" data-act="hotGo" data-id="${h.id}">Show</button><span class="t">${esc(h.name)}</span> <span style="color:#bd0026;letter-spacing:2px">${stars(h.sp[key])}</span><br><span class="sub">${esc(h.region)} · ${esc(h.access)}</span></li>`).join('') || '<li class="sub">No public-land hotspots recorded for this species. It’s mostly on private land.</li>'}</ul>
+    <p class="sub">${esc(window.HOTSPOT_NOTE || '')}</p>`, { tall: true, kind: 'hot' });
+}
+actions.hotList = () => hotList();
+actions.hotListSp = b => { state.sp[b.dataset.k] = true; LS.set('sp', state.sp); state.vis.heat = true; LS.set('vis', state.vis); applyVisibility(); updateHeat(); scheduleRefresh(); hotList(b.dataset.k); };
+actions.hotGo = b => {
+  const h = HOT.find(x => x.id === b.dataset.id); if (!h) return;
+  if (!selSpecies().some(k => h.sp[k])) { const k = Object.entries(h.sp).sort((a, c) => c[1] - a[1])[0][0]; state.sp[k] = true; LS.set('sp', state.sp); applyVisibility(); updateHeat(); scheduleRefresh(); }
+  const lats = h.pts.map(p => p[0]), lngs = h.pts.map(p => p[1]), pad = 0.12;
+  map.fitBounds([[Math.min(...lngs) - pad, Math.min(...lats) - pad], [Math.max(...lngs) + pad, Math.max(...lats) + pad]], { padding: 40, maxZoom: 11 });
+  hotSheet(h.id);
+};
 
 /* ================= v1.2 tools: safety, planning, records ================= */
 const dest = (p, brg, d) => {
@@ -1609,6 +1666,7 @@ actions.scentClear = () => { setData('scent', EMPTY); toast('Scent cone cleared'
 function featureSheet(f) {
   const lid = f.layer.id, p = f.properties || {};
   if (lid === 'log-c') { logDetail(p.id); return; }
+  if (lid === 'hot-c') { hotSheet(p.id); return; }
   const kind = lid.startsWith('huts') ? 'DOC hut' : lid.startsWith('camps') ? 'DOC campsite' : 'DOC track';
   const skip = /^(OBJECTID|GlobalID|Shape_|Shape__|FID|x|y|created|last_edited)/i;
   const rows = Object.entries(p).filter(([k, v]) => v != null && v !== '' && !skip.test(k) && typeof v !== 'object').slice(0, 14);

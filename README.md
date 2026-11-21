@@ -20,6 +20,10 @@ A phone map for planning hunts and checking, on the spot, whether you can hunt w
 - **Hunting access beyond DOC.** A directory of stations, forestry companies, iwi and council land, with how to get permission (Makowhai Station, Blue Duck, Kaingaroa, OneFortyOne, Te Urewera, Greater Wellington and more).
 - **Other tools:** waypoints with GPX export, a log of your landowner permissions, a trip intentions message to text a contact, and wind forecast plus first and last light.
 
+## Public-land hotspots by species
+
+Tick a species under Map & layers → Animals and a heatmap shows where DOC and hunters rate public land best for it. There are 47 areas, rated 1–3 from DOC block descriptions, DOC monitoring, herd management plans and hunter forums. Tap a red dot for notes, access rules and sources, or use **Best public areas** for a ranked list. It reflects reputation, not live counts, and popular areas carry the most pressure. Edit `hotspots.js` to add your own spots.
+
 ## Field tools (More menu)
 
 - **Shooting arc check:** set your firearm and aim (tap the map or use the phone's compass). It lists mapped houses, roads, DOC tracks, huts, legal roads, private land and the hunting-block edge inside your line of fire, nearest first. Mapped data only: it can't see people, stock or unmapped buildings, and ignores terrain.
