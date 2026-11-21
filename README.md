@@ -20,6 +20,19 @@ A phone map for planning hunts and checking, on the spot, whether you can hunt w
 - **Hunting access beyond DOC.** A directory of stations, forestry companies, iwi and council land, with how to get permission (Makowhai Station, Blue Duck, Kaingaroa, OneFortyOne, Te Urewera, Greater Wellington and more).
 - **Other tools:** waypoints with GPX export, a log of your landowner permissions, a trip intentions message to text a contact, and wind forecast plus first and last light.
 
+## Field tools (More menu)
+
+- **Shooting arc check:** set your firearm and aim (tap the map or use the phone's compass). It lists mapped houses, roads, DOC tracks, huts, legal roads, private land and the hunting-block edge inside your line of fire, nearest first. Mapped data only: it can't see people, stock or unmapped buildings, and ignores terrain.
+- **Track & back to the truck:** records your route (keeps the screen on, since phones stop web-app GPS when locked). "Mark truck here" puts a navigation arrow and distance at the top of the map. Any waypoint can be a target.
+- **Boundary distance:** the live status bar shows how close the nearest private boundary or hunting-block edge is.
+- **Check-in timer:** start it from Trip intentions. It warns before your back-by time and has one-tap "I'm out safe" and "Text position" buttons. It only runs while the app is open.
+- **Terrain:** hillshade, slope steepness (25/30/35/45°) and sunny north faces, under Map & layers. Tick "Terrain" when saving an offline area.
+- **Route planner:** tap points to draw a route and get distance, climb and an elevation profile. Save it or export GPX.
+- **Scent cone:** in Wind, scent & sun, tap any forecast hour to draw where your scent will carry.
+- **DOC huts, campsites & tracks** layer. Tap a hut for details.
+- **Hunt log:** kills and sightings with species, sex, weight, notes and a photo, season totals, and dots on the map.
+- **Share a trip:** send waypoints, routes, permitted-property locations and the plan as a link that opens in the app, or as a GPX file.
+
 ## Put it on your phone (about 10 minutes, free)
 
 The app is a set of static files. It needs to be served over **https** for GPS and offline mode to work. GitHub Pages is the simplest option.

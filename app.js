@@ -157,6 +157,11 @@ const LAYERS = [
   { id: 'parcels', group: 'parcels', minz: 13, url: LINZ + 'LINZ_NZ_Primary_Parcels/FeatureServer/0', fields: 'appellation,parcel_intent,land_district,titles,calc_area', pages: 8 },
   { id: 'pestWill', group: 'pest', minz: 7, url: DOC + 'Pesticides_WillBeLaid_HFV/FeatureServer/0', fields: 'BlockName,Pesticide,PesticideTradeName,MethodName,StartDate,FinishDate,LeadAgency,CautionPeriod' },
   { id: 'pestHave', group: 'pest', minz: 7, url: DOC + 'Pesticides_HaveBeenLaid_HFV/FeatureServer/0', fields: 'BlockName,Pesticide,PesticideTradeName,MethodName,StartDate,FinishDate,LeadAgency,CautionPeriod' },
+  { id: 'huts', group: 'huts', minz: 9, url: DOC + 'DOC_Huts_Open_Data/FeatureServer/0', fields: '*' },
+  { id: 'camps', group: 'huts', minz: 9, url: DOC + 'DOC_Campsites_Open_Data/FeatureServer/0', fields: '*' },
+  { id: 'tracks', group: 'huts', minz: 10, url: DOC + 'DOC_Tracks_Open_Data/FeatureServer/0', fields: '*' },
+  { id: 'addr', group: 'safety', minz: 99, url: LINZ + 'LINZ_NZ_Addresses/FeatureServer/0', fields: 'full_address', pages: 8, max: 2000 },
+  { id: 'rdl', group: 'safety', minz: 99, url: LINZ + 'LINZ_NZ_Addresses_Roads/FeatureServer/0', fields: 'full_road_name', pages: 6, max: 2000 },
   ...SPECIES.map(s => ({ id: 'sp_' + s.key, group: 'species', sp: s, minz: 5, url: DOC + s.svc + '/FeatureServer/0', fields: 'CommonName,PA', where: "PA='Presence'" }))
 ];
 const LBY = Object.fromEntries(LAYERS.map(l => [l.id, l]));
@@ -170,7 +175,7 @@ const WP_TYPES = { vehicle: ['Vehicle', '#1d4ed8'], camp: ['Camp / hut', '#0d948
 /* ---------------- state ---------------- */
 const state = {
   base: LS.get('base', 'topo'),
-  vis: Object.assign({ pcl: true, hunt: true, paa: true, priv: true, parcels: true, pest: true, access: true, wps: true }, LS.get('vis', {})),
+  vis: Object.assign({ pcl: true, hunt: true, paa: true, priv: true, parcels: true, pest: true, access: true, wps: true, huts: true, routes: true, log: true, hill: false, slope: false, sun: false }, LS.get('vis', {})),
   strength: LS.get('strength', 1), fade: LS.get('fade', 0),
   sp: LS.get('sp', {}),
   alerts: LS.get('alerts', true),
@@ -202,8 +207,8 @@ const DB = {
   open() {
     if (this._db) return Promise.resolve(this._db);
     return new Promise((res, rej) => {
-      const r = indexedDB.open('huntmap', 1);
-      r.onupgradeneeded = () => { const d = r.result; ['areas', 'wps', 'perms'].forEach(s => d.objectStoreNames.contains(s) || d.createObjectStore(s, { keyPath: 'id' })); };
+      const r = indexedDB.open('huntmap', 2);
+      r.onupgradeneeded = () => { const d = r.result; ['areas', 'wps', 'perms', 'tracks', 'routes', 'log'].forEach(s => d.objectStoreNames.contains(s) || d.createObjectStore(s, { keyPath: 'id' })); };
       r.onsuccess = () => { this._db = r.result; res(this._db); };
       r.onerror = () => rej(r.error);
     });
@@ -297,12 +302,17 @@ function applyPaint() {
 function addOverlays() {
   const src = id => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: (state.loaded[id] && state.loaded[id].fc) || EMPTY }); };
   LAYERS.forEach(L => src(L.id));
-  ['sel', 'acc', 'tline', 'wps', 'priv'].forEach(src);
+  ['sel', 'acc', 'tline', 'wps', 'priv', 'arc', 'scent', 'rte', 'routes', 'trk', 'log'].forEach(src);
+  const rsrc = (id, tiles, maxzoom) => { if (!map.getSource(id)) map.addSource(id, { type: 'raster', tiles: [tiles], tileSize: 256, maxzoom }); };
+  rsrc('hill', hillURL(), 15); rsrc('slope', 'terrain://{z}/{x}/{y}?m=slope', 14); rsrc('sun', 'terrain://{z}/{x}/{y}?m=sun', 14);
   if (!map.getSource('fade')) map.addSource('fade', { type: 'geojson', data: WORLD });
   if (!map.hasImage('noHunt')) map.addImage('noHunt', stripes('#dc2626'));
   const add = l => { if (!map.getLayer(l.id)) map.addLayer(l); };
   const addF = (id, source, colour, op, extra = {}) => { BASE_OP[id] = op; add({ id, type: 'fill', source, ...extra, paint: { 'fill-color': colour, 'fill-opacity': opOf(id) } }); };
   add({ id: 'fade-f', type: 'fill', source: 'fade', paint: { 'fill-color': '#ffffff', 'fill-opacity': state.fade } });
+  add({ id: 'hill-r', type: 'raster', source: 'hill', paint: { 'raster-opacity': 0.4 } });
+  add({ id: 'slope-r', type: 'raster', source: 'slope', minzoom: 10, paint: { 'raster-opacity': 0.85 } });
+  add({ id: 'sun-r', type: 'raster', source: 'sun', minzoom: 10, paint: { 'raster-opacity': 0.8 } });
   // 4. needs landowner permission (derived from parcels not covered by public land)
   addF('priv-f', 'priv', ['match', ['get', 'cls'], 'maori', PAL.maori, 'river', PAL.river, 'check', PAL.check, PAL.priv], 0.28, { minzoom: 13 });
   // 1. DOC land
@@ -334,8 +344,20 @@ function addOverlays() {
   add({ id: 'tline-l', type: 'line', source: 'tline', paint: { 'line-color': '#ff6a13', 'line-width': 2.5, 'line-dasharray': [2, 2] } });
   add({ id: 'acc-f', type: 'fill', source: 'acc', paint: { 'fill-color': '#1a73e8', 'fill-opacity': 0.12 } });
   add({ id: 'acc-l', type: 'line', source: 'acc', paint: { 'line-color': '#1a73e8', 'line-width': 1 } });
+  add({ id: 'tracks-l', type: 'line', source: 'tracks', minzoom: 10, paint: { 'line-color': '#7c2d12', 'line-width': 2, 'line-dasharray': [2, 1.5] } });
+  add({ id: 'scent-f', type: 'fill', source: 'scent', paint: { 'fill-color': '#8b5cf6', 'fill-opacity': 0.22 } });
+  add({ id: 'scent-l', type: 'line', source: 'scent', paint: { 'line-color': '#6d28d9', 'line-width': 1.5, 'line-dasharray': [1, 1] } });
+  add({ id: 'arc-f', type: 'fill', source: 'arc', paint: { 'fill-color': '#ef4444', 'fill-opacity': 0.18 } });
+  add({ id: 'arc-l', type: 'line', source: 'arc', paint: { 'line-color': '#b91c1c', 'line-width': 2 } });
+  add({ id: 'routes-l', type: 'line', source: 'routes', paint: { 'line-color': '#7c3aed', 'line-width': 3, 'line-dasharray': [3, 1.5] } });
+  add({ id: 'trk-l', type: 'line', source: 'trk', paint: { 'line-color': '#2563eb', 'line-width': 3.5 } });
+  add({ id: 'rte-l', type: 'line', source: 'rte', paint: { 'line-color': '#ff6a13', 'line-width': 3.5 } });
+  add({ id: 'rte-c', type: 'circle', source: 'rte', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': '#ff6a13', 'circle-stroke-width': 2 } });
+  add({ id: 'huts-c', type: 'circle', source: 'huts', minzoom: 9, paint: { 'circle-radius': 6, 'circle-color': '#b91c1c', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+  add({ id: 'camps-c', type: 'circle', source: 'camps', minzoom: 9, paint: { 'circle-radius': 6, 'circle-color': '#0f766e', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+  add({ id: 'log-c', type: 'circle', source: 'log', paint: { 'circle-radius': 6, 'circle-color': ['match', ['get', 'kind'], 'kill', '#be123c', '#f59e0b'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
   add({ id: 'wps-c', type: 'circle', source: 'wps', paint: { 'circle-radius': 7, 'circle-color': ['get', 'colour'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
-  applyVisibility(); renderWps(); updateAcc(); updateTargetLine(); computePriv();
+  applyVisibility(); renderWps(); renderRoutes(); renderLog(); updateAcc(); updateTargetLine(); computePriv();
 }
 map.on('style.load', addOverlays);
 
@@ -350,6 +372,7 @@ function applyVisibility() {
   }
   if (map.getLayer('wps-c')) map.setLayoutProperty('wps-c', 'visibility', state.vis.wps ? 'visible' : 'none');
   if (map.getLayer('priv-f')) map.setLayoutProperty('priv-f', 'visibility', state.vis.priv ? 'visible' : 'none');
+  for (const [id, k] of [['hill-r', 'hill'], ['slope-r', 'slope'], ['sun-r', 'sun'], ['routes-l', 'routes'], ['log-c', 'log']]) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', state.vis[k] ? 'visible' : 'none');
   accessMarkers.forEach(m => { m.getElement().style.display = state.vis.access ? '' : 'none'; });
 }
 function setData(id, fc) { const s = map.getSource(id); if (s) s.setData(fc); if (PUBLIC_IDS.includes(id) || id === 'parcels') schedulePriv(); }
@@ -378,21 +401,24 @@ function parcelCls(i) {
   if (/reserve|crown|railway|marine|accretion|reclamation|erosion/i.test(i)) return 'check';
   return 'private';
 }
-function computePriv() {
-  if (!map.getSource('priv')) return;
-  const pf = state.loaded.parcels && state.loaded.parcels.fc;
-  if (!pf || !state.vis.priv) { map.getSource('priv').setData(EMPTY); return; }
-  const pub = [];
-  for (const id of PUBLIC_IDS) { const st = state.loaded[id]; if (st && st.fc) for (const f of st.fc.features) if (f.geometry && /Polygon/.test(f.geometry.type)) pub.push(f); }
-  const out = [];
-  for (const f of pf.features) {
+let lastPriv = [];
+function privFeatures(pf, pubFeats) {
+  const pub = pubFeats.filter(f => f.geometry && /Polygon/.test(f.geometry.type)), out = [];
+  for (const f of (pf && pf.features) || []) {
     if (!f.geometry || !/Polygon/.test(f.geometry.type)) continue;
     const cls = parcelCls((f.properties && f.properties.parcel_intent) || ''); if (!cls) continue;
     const p = innerPoint(f); let isPub = false;
     for (const q of pub) { const b = fbbox(q); if (p[0] < b[0] || p[0] > b[2] || p[1] < b[1] || p[1] > b[3]) continue; if (featContains(q, p)) { isPub = true; break; } }
     if (!isPub) out.push({ type: 'Feature', geometry: f.geometry, properties: { cls } });
   }
-  map.getSource('priv').setData({ type: 'FeatureCollection', features: out });
+  return out;
+}
+function computePriv() {
+  if (!map.getSource('priv')) return;
+  const pf = state.loaded.parcels && state.loaded.parcels.fc;
+  const pub = PUBLIC_IDS.flatMap(id => (state.loaded[id] && state.loaded[id].fc) ? state.loaded[id].fc.features : []);
+  lastPriv = pf ? privFeatures(pf, pub) : [];
+  map.getSource('priv').setData(state.vis.priv ? { type: 'FeatureCollection', features: lastPriv } : EMPTY);
 }
 
 /* ---------------- loading data for the view ---------------- */
@@ -431,8 +457,8 @@ map.on('dragstart', () => { if (state.follow) { state.follow = false; updateLoca
 /* ---------------- sheet ---------------- */
 const sheet = $('#sheet'), sheetBody = $('#sheetBody');
 let sheetKind = '';
-function showSheet(html, { tall = false, kind = '' } = {}) {
-  sheetBody.innerHTML = html; sheet.classList.toggle('tall', tall); sheet.hidden = false; sheet.scrollTop = 0; sheetKind = kind;
+function showSheet(html, { tall = false, kind = '', mini = false } = {}) {
+  sheetBody.innerHTML = html; sheet.classList.toggle('tall', tall); sheet.classList.toggle('mini', mini); sheet.hidden = false; sheet.scrollTop = 0; sheetKind = kind;
 }
 function closeSheet() { sheet.hidden = true; sheetKind = ''; }
 $('#sheetClose').onclick = () => { closeSheet(); clearSelection(); };
@@ -451,7 +477,16 @@ function updateTargetLine() {
   if (!map.getSource('tline')) return;
   setData('tline', state.me && state.target ? { type: 'Feature', geometry: { type: 'LineString', coordinates: [[state.me.lng, state.me.lat], state.target] }, properties: {} } : EMPTY);
 }
-map.on('click', e => identify([e.lngLat.lng, e.lngLat.lat]));
+map.on('click', e => {
+  const p = [e.lngLat.lng, e.lngLat.lat];
+  if (state.mode === 'route') { routeAdd(p); return; }
+  if (state.mode === 'arc') { state.mode = null; arc.brg = bearing(arc.p, p); runArc(); return; }
+  const ids = ['huts-c', 'camps-c', 'log-c'].filter(id => map.getLayer(id) && map.getLayoutProperty(id, 'visibility') !== 'none');
+  const box = [[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]];
+  const fs = ids.length ? map.queryRenderedFeatures(box, { layers: ids }) : [];
+  if (fs.length) { featureSheet(fs[0]); return; }
+  identify(p);
+});
 
 async function identifyOnline(p) {
   const q = (L, geom = false) => agsQuery(L.url, pointParams(p, L, geom), { pages: 1, timeout: 12000, rec: 20 }).then(fc => fc.features);
@@ -623,7 +658,7 @@ function onPos(pos) {
   meMarker.setLngLat([c.longitude, c.latitude]).addTo(map);
   const hd = meMarker.getElement().querySelector('.hd');
   if (c.heading != null && !isNaN(c.heading) && c.speed > 0.5) { hd.style.display = 'block'; meMarker.setRotation(c.heading); } else hd.style.display = 'none';
-  updateAcc(); updateTargetLine();
+  updateAcc(); updateTargetLine(); recordPos(c, pos.timestamp); updateNav();
   if (state.follow) map.easeTo({ center: [c.longitude, c.latitude], zoom: first ? Math.max(map.getZoom(), 15) : map.getZoom(), duration: first ? 800 : 400 });
   checkStatus();
 }
@@ -650,7 +685,7 @@ async function checkStatus() {
     try { r = await identifyOnline(p); v = classify(r); } catch {}
   }
   const bar = $('#statusBar'); bar.hidden = false; bar.dataset.cat = v.cat;
-  $('#statusText').textContent = (v.cat === 'unknown' ? 'Status unknown' : v.title) + (me.acc > 50 ? ` (±${Math.round(me.acc)} m)` : '');
+  $('#statusText').textContent = (v.cat === 'unknown' ? 'Status unknown' : v.title) + boundaryNote(p, v.cat) + (me.acc > 50 ? ` (±${Math.round(me.acc)} m)` : '');
   const prev = state.lastStatus; state.lastStatus = v.cat;
   if (state.alerts && prev && prev !== v.cat && (v.cat === 'private' || v.cat === 'no')) {
     bar.classList.remove('flash'); void bar.offsetWidth; bar.classList.add('flash');
@@ -683,6 +718,13 @@ function layersSheet() {
     ${tg('pest', 'Pesticide operations (1080 etc.)', '#d23a2b')}
     ${tg('access', 'Hunting access directory pins', '#5b47a6')}
     ${tg('wps', 'My waypoints', '#1d4ed8')}
+    ${tg('huts', 'DOC huts, campsites &amp; tracks', '#b91c1c', 'Zoom 9+. Tap a hut for details')}
+    ${tg('routes', 'My planned routes', '#7c3aed')}
+    ${tg('log', 'Hunt log (kills red, sightings amber)', '#be123c')}
+    <h3>Terrain</h3>
+    ${tg('hill', 'Hillshade', '#94a3b8', 'Shaded relief to read the ground')}
+    ${tg('slope', 'Slope steepness', '#f97316', 'Zoom 10+. Yellow 25°+, orange 30°+, red 35°+, purple 45°+')}
+    ${tg('sun', 'Sunny north faces', '#facc15', 'Zoom 10+. Yellow: north-facing (warm, often winter feed). Blue: shady south faces')}
     <h3>Animals (DOC distribution)</h3>
     <div class="btnrow"><button class="btn small" data-act="spPreset">Deer, goats &amp; pigs</button><button class="btn small ghost" data-act="spNone">Clear</button></div>
     ${SPECIES.map(sp).join('')}
@@ -770,7 +812,7 @@ function wpList() {
   const me = state.me ? [state.me.lng, state.me.lat] : null;
   const items = [...state.wps].sort((a, b) => b.t - a.t);
   showSheet(`<h2>Waypoints</h2><div class="btnrow"><button class="btn" data-act="wpHere">At my location</button><button class="btn ghost" data-act="wpCentre">At map centre</button>${items.length ? '<button class="btn ghost" data-act="gpx">Export GPX</button>' : ''}</div>
-    <ul class="list">${items.map(w => `<li><span class="swatch" style="display:inline-block;vertical-align:-2px;background:${(WP_TYPES[w.type] || WP_TYPES.note)[1]}"></span> <span class="t">${esc(w.name)}</span><span class="badge">${(WP_TYPES[w.type] || WP_TYPES.note)[0]}</span><br><span class="sub">${fmtDate(w.t)}${me ? ' · ' + fmtDist(distM(me, [w.lng, w.lat])) + ' ' + compass(bearing(me, [w.lng, w.lat])) : ''}${w.note ? ' · ' + esc(w.note) : ''}</span><div class="btnrow"><button class="btn small ghost" data-act="wpGo" data-id="${w.id}">Show</button><a class="btn small ghost" href="https://www.google.com/maps/dir/?api=1&destination=${w.lat},${w.lng}" target="_blank" rel="noopener">Drive</a><button class="btn small ghost" data-act="wpEdit" data-id="${w.id}">Edit</button><button class="btn small ghost" data-act="wpDel" data-id="${w.id}">Delete</button></div></li>`).join('') || '<li class="sub">No waypoints yet. Tap the map, then “Save waypoint”.</li>'}</ul>`, { tall: true, kind: 'wp' });
+    <ul class="list">${items.map(w => `<li><span class="swatch" style="display:inline-block;vertical-align:-2px;background:${(WP_TYPES[w.type] || WP_TYPES.note)[1]}"></span> <span class="t">${esc(w.name)}</span><span class="badge">${(WP_TYPES[w.type] || WP_TYPES.note)[0]}</span><br><span class="sub">${fmtDate(w.t)}${me ? ' · ' + fmtDist(distM(me, [w.lng, w.lat])) + ' ' + compass(bearing(me, [w.lng, w.lat])) : ''}${w.note ? ' · ' + esc(w.note) : ''}</span><div class="btnrow"><button class="btn small ghost" data-act="wpGo" data-id="${w.id}">Show</button><button class="btn small ghost" data-act="navTo" data-id="${w.id}">Navigate</button><a class="btn small ghost" href="https://www.google.com/maps/dir/?api=1&destination=${w.lat},${w.lng}" target="_blank" rel="noopener">Drive</a><button class="btn small ghost" data-act="wpEdit" data-id="${w.id}">Edit</button><button class="btn small ghost" data-act="wpDel" data-id="${w.id}">Delete</button></div></li>`).join('') || '<li class="sub">No waypoints yet. Tap the map, then “Save waypoint”.</li>'}</ul>`, { tall: true, kind: 'wp' });
 }
 actions.wpList = wpList;
 actions.wpHere = () => state.me ? wpForm([state.me.lng, state.me.lat]) : toast('Turn on location first');
@@ -831,6 +873,8 @@ function tripSheet() {
     <span class="field-l">Raise the alarm if no contact by</span><input type="datetime-local" id="tAlarm" value="${esc(t.alarm || '')}">
     <span class="field-l">Gear (PLB, inReach, radio, first aid)</span><input type="text" id="tGear" value="${esc(t.gear || '')}">
     <span class="field-l">Trusted contact’s phone (for SMS)</span><input type="tel" id="tPhone" value="${esc(t.phone || '')}">
+    <div class="btnrow"><button class="btn" data-act="checkinStart">Start check-in timer</button><button class="btn ghost" data-act="tripPos">Text my position</button></div>
+    <p class="sub">The check-in timer reminds you before your back-by time and helps you text “out safe” or your position. It only runs while the app is open, so your contact is still the real safety net.</p>
     <div class="btnrow"><button class="btn" data-act="tripShare">Share / text</button><button class="btn ghost" data-act="tripCopy">Copy</button><a class="btn ghost" href="${LINKS.adventure}" target="_blank" rel="noopener">AdventureSmart</a></div>`, { tall: true, kind: 'trip' });
 }
 function tripText() {
@@ -861,9 +905,11 @@ async function showConditions(p) {
     const H = j.hourly, start = H.time.findIndex(t => new Date(t) >= new Date(now.getTime() - 36e5));
     const cells = [];
     for (let i = Math.max(start, 0); i < H.time.length && cells.length < 18; i += 3) {
-      cells.push(`<div><b>${new Date(H.time[i]).toLocaleTimeString('en-NZ', { weekday: cells.length && new Date(H.time[i]).getHours() < 3 ? 'short' : undefined, hour: 'numeric' })}</b>${arrow(H.wind_direction_10m[i])}${Math.round(H.wind_speed_10m[i])}<span class="sub">/${Math.round(H.wind_gusts_10m[i])}</span><br>${compass(H.wind_direction_10m[i])}<br><span class="sub">${Math.round(H.temperature_2m[i])}° ${H.precipitation_probability[i] ?? '–'}%</span></div>`);
+      cells.push(`<div data-act="scent" data-i="${i}" role="button" tabindex="0" style="cursor:pointer"><b>${new Date(H.time[i]).toLocaleTimeString('en-NZ', { weekday: cells.length && new Date(H.time[i]).getHours() < 3 ? 'short' : undefined, hour: 'numeric' })}</b>${arrow(H.wind_direction_10m[i])}${Math.round(H.wind_speed_10m[i])}<span class="sub">/${Math.round(H.wind_gusts_10m[i])}</span><br>${compass(H.wind_direction_10m[i])}<br><span class="sub">${Math.round(H.temperature_2m[i])}° ${H.precipitation_probability[i] ?? '–'}%</span></div>`);
     }
-    showSheet(head + `<h3>Wind forecast (km/h, gusts)</h3><p class="sub">Arrows point where the wind is blowing <b>to</b>, so your scent goes that way. Stay downwind of where you expect animals.</p><div class="wind">${cells.join('')}</div><p class="sub">Forecast: Open-Meteo.</p>`, { kind: 'cond' });
+    lastWind = { p, H };
+    const nowI = Math.max(start, 0);
+    showSheet(head + `<h3>Wind forecast (km/h, gusts)</h3><p class="sub">Arrows point where the wind is blowing <b>to</b>, which is where your scent goes. Tap a time to draw the scent cone on the map.</p><div class="btnrow"><button class="btn small" data-act="scent" data-i="${nowI}">Scent cone now</button><button class="btn small ghost" data-act="scentClear">Clear scent cone</button></div><div class="wind">${cells.join('')}</div><p class="sub">Forecast: Open-Meteo.</p>`, { kind: 'cond' });
   } catch { showSheet(head + `<p class="sub">Couldn’t load the wind forecast.</p>`, { kind: 'cond' }); }
 }
 
@@ -873,7 +919,7 @@ const lat2y = (lat, z) => { const r = lat * rad; return Math.floor((1 - Math.log
 function tileRange(b, z) { return { x0: lon2x(b[0], z), x1: lon2x(b[2], z), y0: lat2y(b[3], z), y1: lat2y(b[1], z) }; }
 function countTiles(b, z0, z1) { let n = 0; for (let z = z0; z <= z1; z++) { const r = tileRange(b, z); n += (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1); } return n; }
 const LEVELS = { std: { label: 'Standard', topo50: 14, aerial: 15 }, det: { label: 'Detailed', topo50: 15, aerial: 16 }, max: { label: 'Maximum', topo50: 16, aerial: 17 } };
-const KB = { topo: 18, topo50: 45, aerial: 35 };
+const KB = { topo: 18, topo50: 45, aerial: 35, terrain: 30 };
 function normKey(u) { try { const x = new URL(u); x.searchParams.delete('api'); x.searchParams.sort(); return x.toString(); } catch { return u; } }
 let dl = null;
 function offlineSheet() {
@@ -883,6 +929,7 @@ function offlineSheet() {
     if (sel.topo) { const c = countTiles(b, 5, 15); n += c; kb += c * KB.topo; }
     if (sel.topo50) { const c = countTiles(b, 5, L.topo50); n += c; kb += c * KB.topo50; }
     if (sel.aerial) { const c = countTiles(b, 5, L.aerial); n += c; kb += c * KB.aerial; }
+    if (sel.terrain) { const c = countTiles(b, 5, 13) + countTiles(b, 5, Math.min(15, L.topo50)); n += c; kb += c * KB.terrain; }
     return { n, mb: kb / 1024 };
   };
   const e = est(), tooBig = e.n > 25000;
@@ -893,6 +940,7 @@ function offlineSheet() {
     <span class="field-l">Name</span><input type="text" id="dlName" placeholder="e.g. Waitōtara roar trip">
     <span class="field-l">Detail</span><div class="seg">${Object.entries(LEVELS).map(([k, v]) => `<button data-act="lvl" data-k="${k}" class="${lvl === k ? 'on' : ''}">${v.label}<br><span class="sub">aerial z${v.aerial}</span></button>`).join('')}</div>
     ${Object.entries(BASEMAPS).map(([k, v]) => `<label class="toggle"><input type="checkbox" data-act="dlb" data-k="${k}" ${sel[k] ? 'checked' : ''}>${v.label} <span class="sub">${v.note}</span></label>`).join('')}
+    <label class="toggle"><input type="checkbox" data-act="dlb" data-k="terrain" ${sel.terrain ? 'checked' : ''}>Terrain <span class="sub">Hillshade, slope, sunny faces, elevation profiles</span></label>
     <p class="sub">About <b>${e.n.toLocaleString()}</b> tiles, ~<b>${e.mb < 1 ? '<1' : Math.round(e.mb)} MB</b>. ${tooBig ? '<b>Too big. Zoom in or lower the detail.</b>' : 'LINZ limits downloads, so allow about a minute per 800 tiles.'}</p>
     <div id="dlProg" hidden><div class="progress"><i id="dlBar"></i></div><p class="sub" id="dlTxt"></p></div>
     <div class="btnrow"><button class="btn" data-act="dlStart" ${tooBig || !e.n || !online() ? 'disabled' : ''}>${online() ? 'Download area' : 'Offline — connect to download'}</button><button class="btn ghost" data-act="dlCancel" hidden id="dlCancelBtn">Cancel</button></div>
@@ -962,6 +1010,12 @@ actions.dlStart = async () => {
         for (let z = 5; z <= zmax; z++) { const r = tileRange(b, z); for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) urls.push(T.t.replace('{z}', z).replace('{x}', x).replace('{y}', y)); }
       }
     }
+    if (sel.terrain) {
+      area.bases.push('Terrain');
+      for (let z = 5; z <= 13; z++) { const r = tileRange(b, z); for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) urls.push(demURL(z, x, y)); }
+      const ht = hillURL();
+      for (let z = 5; z <= Math.min(15, lvl.topo50); z++) { const r = tileRange(b, z); for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) urls.push(ht.replace('{z}', z).replace('{x}', x).replace('{y}', y)); }
+    }
     const uniq = [...new Set(urls)]; let done = 0, fail = 0, next = 0, tokens = 14, last = Date.now();
     const worker = async () => {
       while (next < uniq.length && !dl.cancel) {
@@ -995,11 +1049,16 @@ $('#btnOffline').onclick = () => (sheetKind === 'offline' && !sheet.hidden ? clo
 /* ---------------- menu & settings ---------------- */
 function menuSheet() {
   showSheet(`<h2>Tools</h2><div class="menu">
+    <button data-act="mArc"><span>🎯</span><span>Shooting arc check<small>What’s in your line of fire</small></span></button>
+    <button data-act="mTrack"><span>🛻</span><span>Track &amp; back to the truck<small>Record your route, arrow back to any point</small></span></button>
+    <button data-act="mRoute"><span>⛰</span><span>Route planner<small>Distance, climb and elevation profile</small></span></button>
+    <button data-act="mLog"><span>🦌</span><span>Hunt log<small>Kills and sightings, photos, season totals</small></span></button>
+    <button data-act="mShare"><span>🔗</span><span>Share a trip<small>Send your plan as a link or GPX</small></span></button>
     <button data-act="mAccess"><span>🗺</span><span>Hunting access beyond DOC<small>Stations, forestry, iwi and council land</small></span></button>
     <button data-act="wpList"><span>📍</span><span>Waypoints<small>Vehicle, camp, sightings. Export GPX</small></span></button>
     <button data-act="permList"><span>✍</span><span>Permissions log<small>Your landowner permissions and conditions</small></span></button>
-    <button data-act="mTrip"><span>🧭</span><span>Trip intentions<small>Text your plan to a trusted contact</small></span></button>
-    <button data-act="mCond"><span>🌬</span><span>Wind &amp; sun<small>Forecast wind, first and last light</small></span></button>
+    <button data-act="mTrip"><span>🧭</span><span>Trip intentions &amp; check-in<small>Text your plan; overdue reminder</small></span></button>
+    <button data-act="mCond"><span>🌬</span><span>Wind, scent &amp; sun<small>Wind forecast, scent cone, first and last light</small></span></button>
     <button data-act="mSettings"><span>⚙</span><span>Settings &amp; help<small>Map key, alerts, data sources, disclaimer</small></span></button></div>`, { kind: 'menu' });
 }
 actions.mAccess = () => accessList();
@@ -1022,7 +1081,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.2 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -1101,13 +1160,565 @@ window.addEventListener('online', () => { netChip(); state.loaded = {}; schedule
 window.addEventListener('offline', () => { netChip(); state.loaded = {}; scheduleRefresh(); toast('Offline — using saved areas'); });
 netChip();
 
+/* ================= v1.2 tools: safety, planning, records ================= */
+const dest = (p, brg, d) => {
+  const dl = d / R, th = brg * rad, f1 = p[1] * rad, l1 = p[0] * rad;
+  const f2 = Math.asin(Math.sin(f1) * Math.cos(dl) + Math.cos(f1) * Math.sin(dl) * Math.cos(th));
+  const l2 = l1 + Math.atan2(Math.sin(th) * Math.sin(dl) * Math.cos(f1), Math.cos(dl) - Math.sin(f1) * Math.sin(f2));
+  return [l2 / rad, f2 / rad];
+};
+const angDiff = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
+function conePoly(p, brg, half, r, props = {}) {
+  const pts = [p], step = Math.max(1, half / 12);
+  for (let a = -half; a <= half + 0.001; a += step) pts.push(dest(p, brg + a, r));
+  pts.push(p);
+  return { type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [pts] } };
+}
+const xy = (p, ref) => [(p[0] - ref[0]) * Math.cos(ref[1] * rad) * 111320, (p[1] - ref[1]) * 110540];
+function segDist(P, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+  let t = L ? ((P[0] - a[0]) * dx + (P[1] - a[1]) * dy) / L : 0; t = Math.max(0, Math.min(1, t));
+  const qx = a[0] + t * dx, qy = a[1] + t * dy; return [Math.hypot(qx - P[0], qy - P[1]), [qx, qy]];
+}
+function nearestEdge(p, f) {
+  const g = f.geometry; const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : null;
+  if (!polys) return null;
+  let best = { d: Infinity, q: null };
+  for (const poly of polys) for (const ring of poly) {
+    let prev = xy(ring[0], p);
+    for (let i = 1; i < ring.length; i++) { const cur = xy(ring[i], p); const [d, q] = segDist([0, 0], prev, cur); if (d < best.d) best = { d, q }; prev = cur; }
+  }
+  if (best.q) best.q = [p[0] + best.q[0] / (Math.cos(p[1] * rad) * 111320), p[1] + best.q[1] / 110540];
+  return best;
+}
+const lineFC = pts => pts.length > 1 ? { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts.map(q => [q[0], q[1]]) } } : EMPTY;
+const trackLen = pts => { let d = 0; for (let i = 1; i < pts.length; i++) d += distM(pts[i - 1], pts[i]); return d; };
+const fmtDur = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min'; };
+const pickName = p => (p && (p.name || p.Name || p.NAME || p.hutName || p.HutName || p.campsiteName || p.trackName || p.DESCRIPTION || p.description || p.Description)) || 'Unnamed';
+const myP = () => state.me ? [state.me.lng, state.me.lat] : null;
+const sameP = (a, b) => a && b && Math.abs(a[0] - b[0]) < 1e-7 && Math.abs(a[1] - b[1]) < 1e-7;
+const smsHref = (phone, body) => `sms:${encodeURIComponent(phone || '')}?&body=${encodeURIComponent(body)}`;
+function posText() {
+  const me = state.me; if (!me) return 'Location unavailable (GPS off).';
+  const [E, N] = llToNZTM(me.lng, me.lat);
+  return `My location: ${me.lat.toFixed(5)}, ${me.lng.toFixed(5)} (NZTM ${Math.round(E)} E ${Math.round(N)} N) ±${Math.round(me.acc || 0)} m at ${fmtTime(Date.now())}. https://www.google.com/maps?q=${me.lat.toFixed(5)},${me.lng.toFixed(5)}`;
+}
+function buildGpx({ wpts = [], rtes = [], trks = [] }) {
+  const x = s => esc(s || '');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Hunt Access NZ" xmlns="http://www.topografix.com/GPX/1/1">\n`
+    + wpts.map(w => `<wpt lat="${(+w.lat).toFixed(6)}" lon="${(+w.lng).toFixed(6)}">${w.t ? `<time>${new Date(w.t).toISOString()}</time>` : ''}<name>${x(w.name)}</name><desc>${x(w.note || w.desc)}</desc>${w.type ? `<type>${x(w.type)}</type>` : ''}</wpt>`).join('\n')
+    + rtes.map(r => `\n<rte><name>${x(r.name)}</name>${r.pts.map(p => `<rtept lat="${p[1].toFixed(6)}" lon="${p[0].toFixed(6)}"/>`).join('')}</rte>`).join('')
+    + trks.map(t => `\n<trk><name>${x(t.name)}</name><trkseg>${t.pts.map(p => `<trkpt lat="${p[1].toFixed(6)}" lon="${p[0].toFixed(6)}">${p[2] != null ? `<ele>${p[2]}</ele>` : ''}${p[3] ? `<time>${new Date(p[3]).toISOString()}</time>` : ''}</trkpt>`).join('')}</trkseg></trk>`).join('')
+    + `\n</gpx>`;
+}
+async function shareFile(name, text, type = 'application/gpx+xml') {
+  const file = new File([text], name, { type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+async function dataFor(id, b, z = 15) {
+  const L = LBY[id];
+  if (online()) { try { return await agsQuery(L.url, bboxParams(b, L, z, (b[1] + b[3]) / 2), { pages: L.pages || 6, rec: L.max || 1000, timeout: 25000 }); } catch {} }
+  const fc = offlineFC(id, b);
+  if (!fc.features.length && state.loaded[id]) return state.loaded[id].fc;
+  return fc;
+}
+
+/* ---------- 1. shooting arc ---------- */
+const FIREARMS = { cf: ['Centrefire rifle', 4000], rim: ['.22 rimfire', 1500], slug: ['Shotgun slug', 1200], shot: ['Shotgun (shot)', 300] };
+const arc = { p: null, brg: null, half: LS.get('arcHalf', 10), gun: LS.get('arcGun', 'cf'), out: '' };
+function arcSheet(out) {
+  if (out != null) arc.out = out;
+  arc.p = arc.p || myP() || state.target || [map.getCenter().lng, map.getCenter().lat];
+  const fromMe = sameP(arc.p, myP());
+  showSheet(`<h2>Shooting arc check</h2>
+    <p class="sub">Checks your line of fire, out to your firearm’s maximum travel, for mapped houses (street addresses), roads, DOC tracks, huts, campsites, legal roads and land you don’t have permission for.</p>
+    <span class="field-l">Firearm (approximate maximum travel; varies with your load and angle)</span>
+    <select id="arcGun">${Object.entries(FIREARMS).map(([k, v]) => `<option value="${k}" ${k === arc.gun ? 'selected' : ''}>${v[0]}: up to ${fmtDist(v[1])}</option>`).join('')}</select>
+    <span class="field-l">Arc width: ±<b id="arcHalfV">${arc.half}</b>° either side of your aim</span>
+    <input type="range" min="3" max="45" step="1" value="${arc.half}" data-act="arcHalf" aria-label="Arc width">
+    <p class="sub">Firing from: <b>${fromMe ? 'your location' : arc.p[1].toFixed(5) + ', ' + arc.p[0].toFixed(5)}</b>${arc.brg != null ? ` · aiming ${Math.round(arc.brg)}° ${compass(arc.brg)}` : ''}</p>
+    <div class="btnrow"><button class="btn" data-act="arcAim">Tap where you’re aiming</button><button class="btn ghost" data-act="arcHeading">Use phone direction</button></div>
+    <div class="btnrow">${state.me ? '<button class="btn ghost small" data-act="arcFromMe">Fire from my location</button>' : ''}${state.target ? '<button class="btn ghost small" data-act="arcFromSel">From selected point</button>' : ''}<button class="btn ghost small" data-act="arcFromCentre">From map centre</button><button class="btn ghost small" data-act="arcClear">Clear arc</button></div>
+    <div id="arcOut">${arc.out}</div>`, { kind: 'arc' });
+}
+sheetBody.addEventListener('change', e => { if (e.target.id === 'arcGun') { arc.gun = e.target.value; LS.set('arcGun', arc.gun); if (arc.brg != null) runArc(); } });
+sheetBody.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.act === 'arcHalf') { arc.half = +e.target.value; LS.set('arcHalf', arc.half); const v = $('#arcHalfV'); if (v) v.textContent = arc.half; if (arc.brg != null) setData('arc', conePoly(arc.p, arc.brg, arc.half, FIREARMS[arc.gun][1])); } });
+sheetBody.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.act === 'arcHalf' && arc.brg != null) runArc(); });
+actions.arcAim = () => { state.mode = 'arc'; closeSheet(); toast('Tap the map where you’re aiming', 4000); };
+actions.arcHeading = async () => {
+  if (state.compass == null) await compassOn();
+  const h = state.compass != null ? state.compass : (state.me && state.me.heading != null && !isNaN(state.me.heading) ? state.me.heading : null);
+  if (h == null) { toast('No compass reading. Hold the phone flat and point it, or tap where you’re aiming instead.', 5000); return; }
+  arc.brg = h; runArc();
+};
+actions.arcFromMe = () => { arc.p = myP(); arc.brg != null ? runArc() : arcSheet(''); };
+actions.arcFromSel = () => { arc.p = state.target; arc.brg != null ? runArc() : arcSheet(''); };
+actions.arcFromCentre = () => { const c = map.getCenter(); arc.p = [c.lng, c.lat]; arc.brg != null ? runArc() : arcSheet(''); };
+actions.arcClear = () => { arc.brg = null; arc.out = ''; arc.p = null; setData('arc', EMPTY); arcSheet(''); };
+async function runArc() {
+  const [label, r] = FIREARMS[arc.gun];
+  const cone = conePoly(arc.p, arc.brg, arc.half, r);
+  setData('arc', cone);
+  const b = fbbox(cone);
+  arcSheet(`<p class="sub">Checking ${label.toLowerCase()} arc, ${fmtDist(r)} towards ${Math.round(arc.brg)}° ${compass(arc.brg)}…</p>`);
+  const ids = ['addr', 'rdl', 'tracks', 'huts', 'camps', 'parcels', 'pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other'];
+  const fcs = {};
+  await Promise.all(ids.map(async id => { try { fcs[id] = await dataFor(id, b); } catch { fcs[id] = EMPTY; } }));
+  const inC = q => { const d = distM(arc.p, q); return d <= r && angDiff(bearing(arc.p, q), arc.brg) <= arc.half ? d : null; };
+  const hz = [];
+  const pts = (id, lab, nameOf) => {
+    let best = null, n = 0;
+    for (const f of fcs[id].features) { if (!f.geometry || f.geometry.type !== 'Point') continue; const d = inC(f.geometry.coordinates); if (d != null) { n++; if (!best || d < best.d) best = { d, name: nameOf(f.properties || {}) }; } }
+    if (best) hz.push({ label: lab, d: best.d, n, name: best.name });
+  };
+  pts('addr', 'House / street address', p => p.full_address);
+  pts('huts', 'DOC hut', pickName); pts('camps', 'Campsite', pickName);
+  const lines = (id, lab, nameOf) => {
+    let best = null;
+    for (const f of fcs[id].features) {
+      const g = f.geometry; if (!g) continue;
+      const parts = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+      for (const line of parts) for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], c = line[i], n = Math.max(1, Math.ceil(distM(a, c) / 15));
+        for (let k = 0; k <= n; k++) { const q = [a[0] + (c[0] - a[0]) * k / n, a[1] + (c[1] - a[1]) * k / n]; const d = inC(q); if (d != null && (!best || d < best.d)) best = { d, name: nameOf(f.properties || {}) }; }
+      }
+    }
+    if (best) hz.push({ label: lab, d: best.d, name: best.name });
+  };
+  lines('rdl', 'Road', p => p.full_road_name); lines('tracks', 'DOC track', pickName);
+  const priv = privFeatures(fcs.parcels, ['pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other'].flatMap(id => fcs[id].features));
+  const step = r > 2000 ? 25 : 12, grid = [];
+  for (let a = -arc.half; a <= arc.half + 0.01; a += Math.max(1, arc.half / 10)) for (let d = step; d <= r; d += step) grid.push({ q: dest(arc.p, arc.brg + a, d), d });
+  const firstIn = (feats, lab) => {
+    const cand = feats.filter(f => f.geometry && bboxIntersects(fbbox(f), b)); if (!cand.length) return;
+    let best = null;
+    for (const s of grid) {
+      if (best != null && s.d >= best) continue;
+      for (const f of cand) { const bb = fbbox(f); if (s.q[0] < bb[0] || s.q[0] > bb[2] || s.q[1] < bb[1] || s.q[1] > bb[3]) continue; if (featContains(f, s.q)) { best = s.d; break; } }
+    }
+    if (best != null) hz.push({ label: lab, d: best });
+  };
+  firstIn(fcs.road.features, 'Legal road corridor');
+  firstIn(priv.filter(f => f.properties.cls === 'private'), 'Private land');
+  firstIn(priv.filter(f => f.properties.cls === 'maori'), 'Māori land');
+  firstIn(fcs.hunt.features.filter(f => f.properties && f.properties.HuntStatus === 'Prohibited'), 'DOC no-hunting area');
+  const blk = fcs.hunt.features.find(f => f.properties && f.properties.HuntStatus === 'Permitted' && featContains(f, arc.p));
+  if (blk) { let out = null; for (const s of grid) { if (out != null && s.d >= out) continue; if (!featContains(blk, s.q)) out = s.d; } if (out != null) hz.push({ label: 'Leaves the DOC hunting block', d: out }); }
+  hz.sort((a, c) => a.d - c.d);
+  const noParcels = !fcs.parcels.features.length;
+  let html = !hz.length
+    ? `<div class="verdict v-ok"><div><b>Nothing mapped in this arc</b><span>No mapped houses, roads, tracks, huts or off-limits land within ${fmtDist(r)}.</span></div></div>`
+    : `<div class="verdict v-no"><div><b>${hz.length} hazard${hz.length > 1 ? 's' : ''} in your line of fire</b><span>Nearest: ${esc(hz[0].label)} at ${fmtDist(hz[0].d)}</span></div></div><ul class="list">${hz.map(h => `<li><span class="t">${esc(h.label)}</span>: ${fmtDist(h.d)}${h.n > 1 ? ` (${h.n} in arc)` : ''}${h.name ? `<br><span class="sub">${esc(h.name)}</span>` : ''}</li>`).join('')}</ul>`;
+  if (noParcels) html += `<p class="sub"><b>Property data wasn’t available</b>, so private land wasn’t checked. Go online or save this area for offline use.</p>`;
+  html += `<p class="sub">Mapped data only. It can’t see people, stock, vehicles, unmapped buildings or farm tracks, and it ignores terrain and backstop. Identify your target and what’s beyond it.</p>`;
+  arcSheet(html);
+}
+
+/* ---------- 2. track recording & navigation ---------- */
+state.rec = null; state.nav = LS.get('nav', null); state.compass = null; state.tracks = []; state.routes = []; state.log = []; state.mode = null;
+let wakeLock = null;
+async function keepAwake(on) {
+  try { if (on && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; } } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state.rec && LS.get('wake', true)) keepAwake(true); });
+let compassBound = false;
+async function compassOn() {
+  try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { const r = await DeviceOrientationEvent.requestPermission(); if (r !== 'granted') { toast('Compass permission denied'); return; } } } catch {}
+  if (compassBound) return; compassBound = true;
+  const h = e => {
+    let hd = e.webkitCompassHeading != null ? e.webkitCompassHeading : (e.absolute && e.alpha != null ? (360 - e.alpha) % 360 : null);
+    if (hd != null) { const so = (screen.orientation && screen.orientation.angle) || 0; state.compass = (hd + so) % 360; updateNav(); }
+  };
+  window.addEventListener('deviceorientationabsolute', h); window.addEventListener('deviceorientation', h);
+  toast('Compass on. Hold the phone flat.');
+}
+actions.compassOn = () => compassOn().then(() => sheetKind === 'track' && trackSheet());
+function heading() { if (state.compass != null) return state.compass; const m = state.me; return m && m.heading != null && !isNaN(m.heading) && m.speed > 0.5 ? m.heading : null; }
+function updateNav() {
+  const bar = $('#navBar'), nav = state.nav, me = myP();
+  if (!nav || !me) { bar.hidden = true; return; }
+  const d = distM(me, nav.p), b = bearing(me, nav.p), h = heading();
+  bar.hidden = false;
+  $('#navArrow').style.transform = `rotate(${h != null ? b - h : b}deg)`;
+  $('#navText').textContent = `${nav.name}: ${fmtDist(d)} ${compass(b)}${h == null ? ' (north up)' : ''}`;
+}
+$('#navBar').onclick = () => trackSheet();
+function recordPos(c, t) {
+  const r = state.rec; if (!r || c.accuracy > 50) return;
+  const p = [c.longitude, c.latitude, c.altitude != null ? Math.round(c.altitude) : null, t];
+  const last = r.pts[r.pts.length - 1];
+  if (last && distM(last, p) < 8) return;
+  r.pts.push(p); setData('trk', lineFC(r.pts));
+  if (r.pts.length % 10 === 0) DB.put('tracks', r).catch(() => {});
+}
+function trackSheet() {
+  const me = myP(), nav = state.nav, r = state.rec;
+  const vehicles = state.wps.filter(w => w.type === 'vehicle').sort((a, b) => b.t - a.t);
+  const tracks = [...state.tracks].filter(t => !r || t.id !== r.id).sort((a, b) => b.start - a.start);
+  showSheet(`<h2>Track &amp; back to the truck</h2>
+    <h3>Record your route</h3>
+    ${r ? `<p>Recording <b>${esc(r.name)}</b>: ${fmtDist(trackLen(r.pts))} · ${fmtDur(Date.now() - r.start)} · ${r.pts.length} points</p><div class="btnrow"><button class="btn" data-act="recStop">Stop &amp; save</button></div>`
+        : `<div class="btnrow"><button class="btn" data-act="recStart">Start recording</button></div>`}
+    <label class="toggle"><input type="checkbox" data-act="wake" ${LS.get('wake', true) ? 'checked' : ''}><span>Keep screen on while recording<br><span class="sub">Phones pause web-app GPS when the screen locks</span></span></label>
+    <h3>Navigate back</h3>
+    ${nav ? `<p>Navigating to <b>${esc(nav.name)}</b>${me ? `: ${fmtDist(distM(me, nav.p))} ${compass(bearing(me, nav.p))}` : ''}</p>` : '<p class="sub">Not navigating.</p>'}
+    <div class="btnrow">${me ? '<button class="btn" data-act="navMarkTruck">Mark truck here</button>' : ''}${vehicles.length ? `<button class="btn ghost" data-act="navTo" data-id="${vehicles[0].id}">To ${esc(vehicles[0].name)}</button>` : ''}${state.target ? '<button class="btn ghost" data-act="navTarget">To selected point</button>' : ''}${nav ? '<button class="btn ghost" data-act="navStop">Stop</button>' : ''}</div>
+    <div class="btnrow"><button class="btn ghost small" data-act="compassOn">${state.compass != null ? 'Compass is on' : 'Turn on compass'}</button></div>
+    <p class="sub">The arrow at the top points the way: relative to your phone with the compass on, or north-up without it. Any waypoint can be a target (Waypoints → Navigate).</p>
+    <h3>Saved tracks</h3>
+    <ul class="list">${tracks.map(t => `<li><span class="t">${esc(t.name)}</span><br><span class="sub">${fmtDate(t.start)} · ${fmtDist(trackLen(t.pts))} · ${fmtDur((t.end || t.start) - t.start)}</span><div class="btnrow"><button class="btn small ghost" data-act="trkShow" data-id="${t.id}">Show</button><button class="btn small ghost" data-act="trkGpx" data-id="${t.id}">GPX</button><button class="btn small ghost" data-act="trkDel" data-id="${t.id}">Delete</button></div></li>`).join('') || '<li class="sub">No saved tracks.</li>'}</ul>`, { tall: true, kind: 'track' });
+}
+sheetBody.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.act === 'wake') { LS.set('wake', e.target.checked); if (state.rec) keepAwake(e.target.checked); } });
+actions.recStart = async () => {
+  if (state.watchId == null) startGPS();
+  state.rec = { id: uid(), name: 'Track ' + new Date().toLocaleString('en-NZ', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: TZ }), start: Date.now(), pts: [] };
+  if (state.me) recordPos({ longitude: state.me.lng, latitude: state.me.lat, accuracy: state.me.acc, altitude: null }, Date.now());
+  if (LS.get('wake', true)) keepAwake(true);
+  toast('Recording started'); trackSheet();
+};
+actions.recStop = async () => {
+  const r = state.rec; if (!r) return; r.end = Date.now(); state.rec = null; keepAwake(false);
+  if (r.pts.length > 1) { await DB.put('tracks', r).catch(() => {}); state.tracks = state.tracks.filter(t => t.id !== r.id).concat(r); toast('Track saved: ' + fmtDist(trackLen(r.pts))); }
+  else { DB.del('tracks', r.id).catch(() => {}); toast('Track too short to save'); }
+  trackSheet();
+};
+function setNav(name, p) { state.nav = { name, p }; LS.set('nav', state.nav); updateNav(); if (state.watchId == null) startGPS(); }
+actions.navMarkTruck = async () => {
+  const me = myP(); if (!me) return;
+  const w = { id: uid(), lng: me[0], lat: me[1], name: 'Truck', type: 'vehicle', note: '', t: Date.now() };
+  state.wps.push(w); await DB.put('wps', w).catch(() => {}); renderWps(); setNav('Truck', me); toast('Truck marked'); trackSheet();
+};
+actions.navTo = b => { const w = state.wps.find(x => x.id === b.dataset.id); if (w) { setNav(w.name, [w.lng, w.lat]); toast('Navigating to ' + w.name); if (sheetKind === 'track') trackSheet(); } };
+actions.navTarget = () => { if (state.target) { setNav('Selected point', state.target); trackSheet(); } };
+actions.navStop = () => { state.nav = null; LS.set('nav', null); updateNav(); trackSheet(); };
+actions.trkShow = b => { const t = state.tracks.find(x => x.id === b.dataset.id); if (!t) return; setData('trk', lineFC(t.pts)); const bb = fbbox(lineFC(t.pts)); map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 50, maxZoom: 16 }); closeSheet(); };
+actions.trkGpx = b => { const t = state.tracks.find(x => x.id === b.dataset.id); if (t) shareFile(t.name.replace(/[^\w-]+/g, '_') + '.gpx', buildGpx({ trks: [{ name: t.name, pts: t.pts }] })); };
+actions.trkDel = async b => { if (!(await confirmDlg('Delete this track?', 'Delete'))) return; state.tracks = state.tracks.filter(x => x.id !== b.dataset.id); await DB.del('tracks', b.dataset.id).catch(() => {}); setData('trk', EMPTY); trackSheet(); };
+
+/* ---------- 3. boundary distance ---------- */
+function boundaryNote(p, cat) {
+  const near = [];
+  if (cat !== 'private') {
+    let best = null;
+    for (const f of lastPriv) {
+      if (f.properties.cls !== 'private' && f.properties.cls !== 'maori') continue;
+      const bb = fbbox(f); if (p[0] < bb[0] - 0.008 || p[0] > bb[2] + 0.008 || p[1] < bb[1] - 0.006 || p[1] > bb[3] + 0.006) continue;
+      const e = nearestEdge(p, f); if (e && (!best || e.d < best.d)) best = e;
+    }
+    if (best && best.d < 600) near.push({ d: best.d, t: `private ${fmtDist(best.d)} ${compass(bearing(p, best.q))}` });
+  }
+  if (cat === 'ok' && state.loaded.hunt) {
+    const blk = state.loaded.hunt.fc.features.find(f => featContains(f, p));
+    if (blk) { const e = nearestEdge(p, blk); if (e && e.d < 600) near.push({ d: e.d, t: `block edge ${fmtDist(e.d)} ${compass(bearing(p, e.q))}` }); }
+  }
+  near.sort((a, b) => a.d - b.d);
+  return near.length ? ' · ' + near[0].t : '';
+}
+
+/* ---------- 4. check-in timer ---------- */
+function renderCheckin() {
+  const c = LS.get('checkin', null), el = $('#checkin');
+  if (!c || !c.back) { el.hidden = true; return; }
+  const back = new Date(c.back).getTime(), mins = Math.round((back - Date.now()) / 60000);
+  let cls = '', txt;
+  if (mins > 30) txt = `Due back ${fmtTime(back)}`;
+  else if (mins >= 0) { cls = 'due'; txt = `Due back in ${mins} min`; }
+  else { cls = 'late'; txt = `Overdue ${fmtDur(-mins * 60000)}. Text your contact`; }
+  el.className = cls; el.hidden = false; $('#checkinText').textContent = txt;
+  if (cls && el.dataset.last !== cls && navigator.vibrate) navigator.vibrate([300, 150, 300]);
+  el.dataset.last = cls;
+}
+setInterval(renderCheckin, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) renderCheckin(); });
+$('#checkin').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return; const c = LS.get('checkin', null) || {};
+  if (b.dataset.c === 'safe') { location.href = smsHref(c.phone, `Out safely${c.where ? ' from ' + c.where : ''} at ${fmtTime(Date.now())}.`); LS.set('checkin', null); renderCheckin(); }
+  if (b.dataset.c === 'pos') location.href = smsHref(c.phone, posText());
+  if (b.dataset.c === 'more') { c.back = new Date(new Date(c.back).getTime() + 36e5).toISOString(); LS.set('checkin', c); renderCheckin(); toast('Back-by time moved 1 hour later. Tell your contact too.'); }
+  if (b.dataset.c === 'stop' && (await confirmDlg('Stop the check-in timer?', 'Stop'))) { LS.set('checkin', null); renderCheckin(); }
+});
+actions.checkinStart = () => {
+  const { t } = tripText();
+  if (!t.back) { toast('Set a “Back by” time first'); return; }
+  LS.set('checkin', { back: new Date(t.back).toISOString(), phone: t.phone, where: t.where }); renderCheckin();
+  toast('Check-in timer started. It only works while the app is open.', 5000);
+};
+actions.tripPos = () => { const { t } = tripText(); location.href = smsHref(t.phone, posText()); };
+
+/* ---------- 5. terrain (hillshade, slope, sunny faces) ---------- */
+const tile2lat = (y, z) => { const n = Math.PI - 2 * Math.PI * y / 2 ** z; return Math.atan(Math.sinh(n)) / rad; };
+const demURL = (z, x, y) => `${BM}/v1/tiles/elevation/WebMercatorQuad/${z}/${x}/${y}.png?api=${state.key}&pipeline=terrain-rgb`;
+const hillURL = () => `${BM}/v1/tiles/hillshade/WebMercatorQuad/{z}/{x}/{y}.webp?api=${state.key}`;
+const mkCanvas = (w, h) => typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+const demCache = new Map();
+function demTile(z, x, y) {
+  const k = z + '/' + x + '/' + y; if (demCache.has(k)) return demCache.get(k);
+  const pr = (async () => {
+    const r = await fetch(demURL(z, x, y)); if (!r.ok) throw new Error('DEM ' + r.status);
+    const bmp = await createImageBitmap(await r.blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+    const n = bmp.width, c = mkCanvas(n, n), g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0);
+    const d = g.getImageData(0, 0, n, n).data, h = new Float32Array(n * n);
+    for (let i = 0; i < h.length; i++) h[i] = -10000 + (d[i * 4] * 65536 + d[i * 4 + 1] * 256 + d[i * 4 + 2]) * 0.1;
+    return { n, h };
+  })();
+  demCache.set(k, pr); pr.catch(() => demCache.delete(k));
+  if (demCache.size > 160) demCache.delete(demCache.keys().next().value);
+  return pr;
+}
+async function elevAt(p, z = 13) {
+  const fx = (p[0] + 180) / 360 * 2 ** z, r2 = p[1] * rad, fy = (1 - Math.log(Math.tan(r2) + 1 / Math.cos(r2)) / Math.PI) / 2 * 2 ** z;
+  const x = Math.floor(fx), y = Math.floor(fy);
+  try { const t = await demTile(z, x, y); const i = Math.min(t.n - 1, Math.floor((fx - x) * t.n)), j = Math.min(t.n - 1, Math.floor((fy - y) * t.n)); const v = t.h[j * t.n + i]; return v < -500 ? null : v; } catch { return null; }
+}
+maplibregl.addProtocol('terrain', async params => {
+  const m = params.url.match(/terrain:\/\/(\d+)\/(\d+)\/(\d+)\?m=(\w+)/); const z = +m[1], x = +m[2], y = +m[3], mode = m[4];
+  const t = await demTile(z, x, y), n = t.n, h = t.h;
+  const px = 40075016.7 * Math.cos(tile2lat(y + 0.5, z) * rad) / 2 ** z / n;
+  const c = mkCanvas(n, n), g = c.getContext('2d'), img = g.createImageData(n, n), o = img.data;
+  const H = (i, j) => h[Math.min(n - 1, Math.max(0, j)) * n + Math.min(n - 1, Math.max(0, i))];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const dx = (H(i + 1, j) - H(i - 1, j)) / (2 * px), dy = (H(i, j + 1) - H(i, j - 1)) / (2 * px);
+    const s = Math.atan(Math.hypot(dx, dy)) / rad, k = (j * n + i) * 4; let col = null;
+    if (mode === 'slope') col = s >= 45 ? [124, 58, 237, 190] : s >= 35 ? [220, 38, 38, 165] : s >= 30 ? [249, 115, 22, 145] : s >= 25 ? [250, 204, 21, 115] : null;
+    else if (s >= 5) { const asp = (Math.atan2(-dx, dy) / rad + 360) % 360, nd = angDiff(asp, 0); if (nd <= 45) col = [250, 190, 20, Math.min(170, 50 + s * 4)]; else if (nd >= 135) col = [59, 130, 246, 60]; }
+    if (col) { o[k] = col[0]; o[k + 1] = col[1]; o[k + 2] = col[2]; o[k + 3] = col[3]; }
+  }
+  g.putImageData(img, 0, 0);
+  const blob = c.convertToBlob ? await c.convertToBlob({ type: 'image/png' }) : await new Promise(res => c.toBlob(res, 'image/png'));
+  return { data: await blob.arrayBuffer() };
+});
+
+/* ---------- 6. route planner ---------- */
+const route = { pts: [], prof: null };
+function drawRoute() {
+  const f = [lineFC(route.pts)].filter(x => x !== EMPTY).concat(route.pts.map(p => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } })));
+  setData('rte', { type: 'FeatureCollection', features: f });
+}
+function routeStats() { return { d: trackLen(route.pts) }; }
+function routeSheet(extra = '') {
+  if (state.mode === 'route') {
+    const s = routeStats();
+    showSheet(`<h2>Drawing a route</h2><p>Tap the map to add points. <b>${route.pts.length}</b> points · <b>${fmtDist(s.d)}</b></p>
+      <div class="btnrow"><button class="btn" data-act="rteFinish" ${route.pts.length < 2 ? 'disabled' : ''}>Finish</button><button class="btn ghost" data-act="rteUndo" ${route.pts.length ? '' : 'disabled'}>Undo</button><button class="btn ghost" data-act="rteCancel">Cancel</button></div>`, { kind: 'route', mini: true });
+    return;
+  }
+  const list = [...state.routes].sort((a, b) => b.t - a.t);
+  showSheet(`<h2>Route planner</h2><p class="sub">Draw a planned walk to get its distance, climb and an elevation profile from LINZ terrain data.</p>
+    <div class="btnrow"><button class="btn" data-act="rteStart">Draw a new route</button></div>${extra}
+    <h3>Saved routes</h3><ul class="list">${list.map(r => `<li><span class="t">${esc(r.name)}</span><br><span class="sub">${fmtDist(r.dist)}${r.climb != null ? ` · ↑${Math.round(r.climb)} m ↓${Math.round(r.desc)} m` : ''} · ${fmtDate(r.t)}</span><div class="btnrow"><button class="btn small ghost" data-act="rteShow" data-id="${r.id}">Show</button><a class="btn small ghost" href="https://www.google.com/maps/dir/?api=1&destination=${r.pts[0][1]},${r.pts[0][0]}" target="_blank" rel="noopener">Drive to start</a><button class="btn small ghost" data-act="rteGpx" data-id="${r.id}">GPX</button><button class="btn small ghost" data-act="rteDel" data-id="${r.id}">Delete</button></div></li>`).join('') || '<li class="sub">No saved routes.</li>'}</ul>`, { tall: true, kind: 'route' });
+}
+actions.rteStart = () => { route.pts = []; route.prof = null; state.mode = 'route'; drawRoute(); routeSheet(); toast('Tap the map to add points'); };
+actions.rteUndo = () => { route.pts.pop(); drawRoute(); routeSheet(); };
+actions.rteCancel = () => { state.mode = null; route.pts = []; drawRoute(); routeSheet(); };
+function routeAdd(p) { route.pts.push(p); drawRoute(); routeSheet(); }
+async function profileOf(pts) {
+  const total = trackLen(pts), step = Math.max(15, total / 250), samples = [];
+  let acc = 0; samples.push({ d: 0, p: pts[0] });
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], L = distM(a, b);
+    for (let s = step - (acc % step); s < L; s += step) samples.push({ d: acc + s, p: [a[0] + (b[0] - a[0]) * s / L, a[1] + (b[1] - a[1]) * s / L] });
+    acc += L;
+  }
+  samples.push({ d: total, p: pts[pts.length - 1] });
+  const zs = await Promise.all(samples.map(s => elevAt(s.p)));
+  const ok = samples.map((s, i) => ({ d: s.d, z: zs[i] })).filter(s => s.z != null);
+  if (ok.length < 2) return null;
+  const sm = ok.map((s, i) => { const w = ok.slice(Math.max(0, i - 1), i + 2); return { d: s.d, z: w.reduce((a, b) => a + b.z, 0) / w.length }; });
+  let up = 0, down = 0; for (let i = 1; i < sm.length; i++) { const dz = sm[i].z - sm[i - 1].z; if (dz > 0) up += dz; else down -= dz; }
+  return { pts: sm, up, down, min: Math.min(...sm.map(s => s.z)), max: Math.max(...sm.map(s => s.z)), total };
+}
+function profileSvg(pr) {
+  const W = 300, Hh = 90, dz = Math.max(10, pr.max - pr.min);
+  const pts = pr.pts.map(s => `${(s.d / pr.total * W).toFixed(1)},${(Hh - (s.z - pr.min) / dz * (Hh - 8) - 4).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" style="width:100%;height:110px;display:block;background:var(--field);border-radius:10px" role="img" aria-label="Elevation profile"><polygon points="0,${Hh} ${pts} ${W},${Hh}" fill="#ff6a13" fill-opacity="0.25"/><polyline points="${pts}" fill="none" stroke="#ff6a13" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+    <div class="legend" style="justify-content:space-between"><span>0</span><span>${Math.round(pr.min)}–${Math.round(pr.max)} m</span><span>${fmtDist(pr.total)}</span></div>`;
+}
+const walkTime = (d, up) => fmtDur((d / 1000 / 3.5 + up / 500) * 36e5);
+actions.rteFinish = async () => {
+  state.mode = null; const pts = route.pts.slice(); const d = trackLen(pts);
+  showSheet(`<h2>Route: ${fmtDist(d)}</h2><p class="sub">Working out the elevation profile…</p>`, { kind: 'route' });
+  const pr = await profileOf(pts); route.prof = pr;
+  showSheet(`<h2>Route: ${fmtDist(d)}</h2>
+    ${pr ? `<dl class="kv"><dt>Climb</dt><dd>↑ ${Math.round(pr.up)} m · ↓ ${Math.round(pr.down)} m</dd><dt>Height</dt><dd>${Math.round(pr.min)}–${Math.round(pr.max)} m</dd><dt>Walking time</dt><dd>about ${walkTime(d, pr.up)} on a track. Allow much longer off-track in bush.</dd></dl>${profileSvg(pr)}` : '<p class="sub">Elevation unavailable here (no connection, or terrain not saved offline).</p>'}
+    <span class="field-l">Name</span><input type="text" id="rteName" placeholder="e.g. Ridge to the clearing">
+    <div class="btnrow"><button class="btn" data-act="rteSave">Save route</button><button class="btn ghost" data-act="rteCancel">Discard</button></div>`, { kind: 'route' });
+};
+actions.rteSave = async () => {
+  const pr = route.prof; const r = { id: uid(), name: ($('#rteName').value.trim() || 'Route ' + fmtDate(Date.now())), pts: route.pts.slice(), dist: trackLen(route.pts), climb: pr ? pr.up : null, desc: pr ? pr.down : null, t: Date.now() };
+  state.routes.push(r); await DB.put('routes', r).catch(() => {}); route.pts = []; drawRoute(); renderRoutes(); toast('Route saved'); routeSheet();
+};
+function renderRoutes() { setData('routes', { type: 'FeatureCollection', features: state.routes.map(r => ({ ...lineFC(r.pts), properties: { name: r.name } })).filter(f => f.geometry) }); }
+actions.rteShow = b => { const r = state.routes.find(x => x.id === b.dataset.id); if (!r) return; state.vis.routes = true; LS.set('vis', state.vis); applyVisibility(); const bb = fbbox(lineFC(r.pts)); map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 60, maxZoom: 16 }); closeSheet(); };
+actions.rteGpx = b => { const r = state.routes.find(x => x.id === b.dataset.id); if (r) shareFile(r.name.replace(/[^\w-]+/g, '_') + '.gpx', buildGpx({ rtes: [r] })); };
+actions.rteDel = async b => { if (!(await confirmDlg('Delete this route?', 'Delete'))) return; state.routes = state.routes.filter(x => x.id !== b.dataset.id); await DB.del('routes', b.dataset.id).catch(() => {}); renderRoutes(); routeSheet(); };
+actions.mRoute = () => routeSheet();
+
+/* ---------- 7. scent cone ---------- */
+let lastWind = null;
+function scentAt(i) {
+  if (!lastWind) return;
+  const H = lastWind.H, dir = H.wind_direction_10m[i], spd = H.wind_speed_10m[i];
+  const down = (dir + 180) % 360, len = Math.min(1500, 300 + spd * 40), half = spd < 5 ? 35 : spd < 15 ? 22 : 15;
+  setData('scent', conePoly(lastWind.p, down, half, len));
+  toast(`Scent cone for ${new Date(H.time[i]).toLocaleTimeString('en-NZ', { hour: 'numeric', timeZone: TZ })}: wind from ${compass(dir)} at ${Math.round(spd)} km/h`, 4500);
+}
+actions.scent = b => { scentAt(+b.dataset.i); closeSheet(); };
+actions.scentClear = () => { setData('scent', EMPTY); toast('Scent cone cleared'); };
+
+/* ---------- 8. huts / campsites / tracks + feature popups ---------- */
+function featureSheet(f) {
+  const lid = f.layer.id, p = f.properties || {};
+  if (lid === 'log-c') { logDetail(p.id); return; }
+  const kind = lid.startsWith('huts') ? 'DOC hut' : lid.startsWith('camps') ? 'DOC campsite' : 'DOC track';
+  const skip = /^(OBJECTID|GlobalID|Shape_|Shape__|FID|x|y|created|last_edited)/i;
+  const rows = Object.entries(p).filter(([k, v]) => v != null && v !== '' && !skip.test(k) && typeof v !== 'object').slice(0, 14);
+  const links = rows.filter(([, v]) => typeof v === 'string' && /^https?:\/\//.test(v));
+  const c = f.geometry.type === 'Point' ? f.geometry.coordinates : null;
+  showSheet(`<h2>${esc(pickName(p))}</h2><p class="sub">${kind}</p>
+    <dl class="kv">${rows.filter(([, v]) => !(typeof v === 'string' && /^https?:\/\//.test(v))).map(([k, v]) => `<dt>${esc(k.replace(/_/g, ' '))}</dt><dd>${esc(String(v).slice(0, 240))}</dd>`).join('')}</dl>
+    <div class="btnrow">${links.slice(0, 2).map(([k, v], i) => `<a class="btn ${i ? 'ghost' : ''}" href="${esc(v)}" target="_blank" rel="noopener">${/book/i.test(k) ? 'Book' : 'DOC page'}</a>`).join('')}${c ? `<button class="btn ghost" data-act="saveWp" data-lng="${c[0]}" data-lat="${c[1]}">Save waypoint</button><a class="btn ghost" href="https://www.google.com/maps/dir/?api=1&destination=${c[1]},${c[0]}" target="_blank" rel="noopener">Drive</a>` : ''}</div>`, { kind: 'feat' });
+}
+
+/* ---------- 9. hunt log ---------- */
+let pendingPhoto = null;
+function renderLog() {
+  setData('log', { type: 'FeatureCollection', features: state.log.map(e => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lng, e.lat] }, properties: { id: e.id, kind: e.kind } })) });
+}
+const spName = k => (SPECIES.find(s => s.key === k) || {}).label || (k === 'other' ? 'Other' : k);
+function logSheet(year = LS.get('logYear', new Date().getFullYear())) {
+  LS.set('logYear', year);
+  const years = [...new Set(state.log.map(e => new Date(e.t).getFullYear()).concat(new Date().getFullYear()))].sort((a, b) => b - a);
+  const ents = state.log.filter(e => new Date(e.t).getFullYear() === +year).sort((a, b) => b.t - a.t);
+  const kills = {}, seen = {}; let kg = 0;
+  ents.forEach(e => { const tgt = e.kind === 'kill' ? kills : seen; tgt[e.sp] = (tgt[e.sp] || 0) + (+e.count || 1); if (e.kind === 'kill') kg += +e.kg || 0; });
+  const tbl = o => Object.entries(o).map(([k, v]) => `<span class="tag hit">${esc(spName(k))}: ${v}</span>`).join('') || '<span class="sub">None</span>';
+  showSheet(`<h2>Hunt log</h2>
+    <div class="btnrow"><button class="btn" data-act="logNew">Add kill or sighting</button>${years.map(y => `<button class="btn small ${+y === +year ? '' : 'ghost'}" data-act="logYear" data-y="${y}">${y}</button>`).join('')}</div>
+    <h3>${year} kills${kg ? ` · ${Math.round(kg)} kg` : ''}</h3><div class="tags">${tbl(kills)}</div>
+    <h3>${year} sightings</h3><div class="tags">${tbl(seen)}</div>
+    <h3>Entries</h3><ul class="list">${ents.map(e => `<li><span class="t">${e.kind === 'kill' ? 'Kill' : 'Sighting'}: ${esc(spName(e.sp))}${e.count > 1 ? ' ×' + e.count : ''}</span>${e.photo ? '<span class="badge">photo</span>' : ''}<br><span class="sub">${fmtDate(e.t)} ${fmtTime(e.t)}${e.sex && e.sex !== 'unknown' ? ' · ' + e.sex : ''}${e.kg ? ' · ' + e.kg + ' kg' : ''}${e.note ? ' · ' + esc(e.note) : ''}</span><div class="btnrow"><button class="btn small ghost" data-act="logShow" data-id="${e.id}">View</button></div></li>`).join('') || '<li class="sub">No entries for this year.</li>'}</ul>
+    <p class="sub">Shown on the map as red (kills) and amber (sightings) dots. Turn them off under Map &amp; layers.</p>`, { tall: true, kind: 'log' });
+}
+actions.logYear = b => logSheet(+b.dataset.y);
+actions.mLog = () => logSheet();
+actions.logNew = () => logForm();
+function logForm() {
+  pendingPhoto = null;
+  const where = myP() ? 'me' : state.target ? 'sel' : 'centre';
+  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  showSheet(`<h2>New log entry</h2>
+    <div class="seg" style="grid-template-columns:1fr 1fr"><button data-act="logKind" data-k="kill" class="on" id="lkKill">Kill</button><button data-act="logKind" data-k="sighting" id="lkSight">Sighting</button></div>
+    <span class="field-l">Species</span><select id="lgSp">${SPECIES.map(s => `<option value="${s.key}">${s.label}</option>`).join('')}<option value="other">Other</option></select>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div><span class="field-l">Sex</span><select id="lgSex"><option value="unknown">?</option><option value="male">Male</option><option value="female">Female</option></select></div><div><span class="field-l">Number</span><input type="number" id="lgN" value="1" min="1"></div><div><span class="field-l">Weight kg</span><input type="number" id="lgKg" step="0.5" min="0"></div></div>
+    <span class="field-l">When</span><input type="datetime-local" id="lgT" value="${now}">
+    <span class="field-l">Where</span><select id="lgWhere">${myP() ? `<option value="me" ${where === 'me' ? 'selected' : ''}>My location</option>` : ''}${state.target ? `<option value="sel" ${where === 'sel' ? 'selected' : ''}>Selected map point</option>` : ''}<option value="centre">Map centre</option></select>
+    <span class="field-l">Notes (points, age, conditions)</span><textarea id="lgNote"></textarea>
+    <span class="field-l">Photo</span><input type="file" id="lgPhoto" accept="image/*">
+    <div class="btnrow"><button class="btn" data-act="logSave">Save</button><button class="btn ghost" data-act="mLog">Cancel</button></div>`, { tall: true, kind: 'log' });
+  logForm.kind = 'kill';
+}
+actions.logKind = b => { logForm.kind = b.dataset.k; $('#lkKill').classList.toggle('on', b.dataset.k === 'kill'); $('#lkSight').classList.toggle('on', b.dataset.k !== 'kill'); };
+sheetBody.addEventListener('change', async e => {
+  if (e.target.id !== 'lgPhoto' || !e.target.files[0]) return;
+  try {
+    const bmp = await createImageBitmap(e.target.files[0]); const sc = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    pendingPhoto = c.toDataURL('image/jpeg', 0.75); toast('Photo attached');
+  } catch { toast('Couldn’t read that photo'); }
+});
+actions.logSave = async () => {
+  const w = $('#lgWhere').value, p = w === 'me' ? myP() : w === 'sel' ? state.target : [map.getCenter().lng, map.getCenter().lat];
+  const e = { id: uid(), kind: logForm.kind || 'kill', sp: $('#lgSp').value, sex: $('#lgSex').value, count: +$('#lgN').value || 1, kg: +$('#lgKg').value || null, t: new Date($('#lgT').value).getTime() || Date.now(), note: $('#lgNote').value.trim(), lng: p[0], lat: p[1], photo: pendingPhoto };
+  state.log.push(e); await DB.put('log', e).catch(() => {}); renderLog(); toast('Logged'); logSheet(new Date(e.t).getFullYear());
+};
+function logDetail(id) {
+  const e = state.log.find(x => x.id === id); if (!e) return;
+  showSheet(`<h2>${e.kind === 'kill' ? 'Kill' : 'Sighting'}: ${esc(spName(e.sp))}${e.count > 1 ? ' ×' + e.count : ''}</h2><p class="sub">${fmtDate(e.t)} ${fmtTime(e.t)} · ${e.lat.toFixed(5)}, ${e.lng.toFixed(5)}</p>
+    ${e.photo ? `<img src="${e.photo}" alt="" style="width:100%;border-radius:12px;margin:6px 0">` : ''}
+    <dl class="kv"><dt>Sex</dt><dd>${esc(e.sex)}</dd>${e.kg ? `<dt>Weight</dt><dd>${e.kg} kg</dd>` : ''}${e.note ? `<dt>Notes</dt><dd>${esc(e.note)}</dd>` : ''}</dl>
+    <div class="btnrow"><button class="btn ghost" data-act="logGo" data-id="${e.id}">Show on map</button><button class="btn ghost" data-act="logDel" data-id="${e.id}">Delete</button><button class="btn ghost" data-act="mLog">All entries</button></div>`, { kind: 'log' });
+}
+actions.logShow = b => logDetail(b.dataset.id);
+actions.logGo = b => { const e = state.log.find(x => x.id === b.dataset.id); if (e) { state.vis.log = true; LS.set('vis', state.vis); applyVisibility(); map.flyTo({ center: [e.lng, e.lat], zoom: 15 }); closeSheet(); } };
+actions.logDel = async b => { if (!(await confirmDlg('Delete this log entry?', 'Delete'))) return; state.log = state.log.filter(x => x.id !== b.dataset.id); await DB.del('log', b.dataset.id).catch(() => {}); renderLog(); logSheet(); };
+
+/* ---------- 10. share a trip ---------- */
+const b64u = bytes => { let s = ''; bytes.forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function pack(obj) {
+  const raw = new TextEncoder().encode(JSON.stringify(obj));
+  if (typeof CompressionStream === 'undefined') return 'j' + b64u(raw);
+  const buf = await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
+  return 'z' + b64u(new Uint8Array(buf));
+}
+async function unpack(code) {
+  const bytes = unb64u(code.slice(1));
+  const raw = code[0] === 'z' ? new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()) : bytes;
+  return JSON.parse(new TextDecoder().decode(raw));
+}
+const r5 = v => Math.round(v * 1e5) / 1e5;
+function shareSheet() {
+  const t = LS.get('trip', {});
+  showSheet(`<h2>Share a trip</h2><p class="sub">Send your hunting partner the plan as a link (opens in this app) or a GPX file (for other GPS apps).</p>
+    <label class="toggle"><input type="checkbox" id="shW" checked><span>Waypoints (${state.wps.length})</span></label>
+    <label class="toggle"><input type="checkbox" id="shR" checked><span>Planned routes (${state.routes.length})</span></label>
+    <label class="toggle"><input type="checkbox" id="shP"><span>Locations of properties I have permission for (${state.perms.filter(p => p.lng != null).length})<br><span class="sub">Property names only. Landowner names and phone numbers aren’t included</span></span></label>
+    <label class="toggle"><input type="checkbox" id="shT" ${t.where ? 'checked' : ''}><span>Trip plan (where, dates, vehicle)</span></label>
+    <div class="btnrow"><button class="btn" data-act="shareLink">Share link</button><button class="btn ghost" data-act="shareGpx">Share GPX</button></div>`, { tall: true, kind: 'share' });
+}
+function shareData() {
+  const o = { v: 1 };
+  if ($('#shW').checked) o.w = state.wps.map(w => [w.name, w.type, r5(w.lng), r5(w.lat), w.note || '']);
+  if ($('#shR').checked) o.r = state.routes.map(r => [r.name, r.pts.map(p => [r5(p[0]), r5(p[1])])]);
+  if ($('#shP').checked) o.p = state.perms.filter(p => p.lng != null).map(p => [p.property, r5(p.lng), r5(p.lat)]);
+  if ($('#shT').checked) { const t = LS.get('trip', {}); o.t = { where: t.where, out: t.out, back: t.back, car: t.car }; }
+  return o;
+}
+actions.shareLink = async () => {
+  const code = await pack(shareData()); const url = location.origin + location.pathname + '#trip=' + code;
+  if (navigator.share) { try { await navigator.share({ title: 'Hunt trip', text: 'Our hunt plan in Hunt Access NZ:', url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { toast('Couldn’t share the link'); }
+};
+actions.shareGpx = () => {
+  const o = shareData();
+  shareFile('hunt-trip.gpx', buildGpx({
+    wpts: (o.w || []).map(w => ({ name: w[0], type: w[1], lng: w[2], lat: w[3], note: w[4] })).concat((o.p || []).map(p => ({ name: 'Permission: ' + p[0], lng: p[1], lat: p[2] }))),
+    rtes: (o.r || []).map(r => ({ name: r[0], pts: r[1] }))
+  }));
+};
+actions.mShare = shareSheet;
+let incoming = null;
+async function checkIncoming() {
+  const m = location.hash.match(/^#trip=([\w-]+)$/); if (!m) return;
+  try { incoming = await unpack(m[1]); } catch { toast('That shared trip link is damaged'); return; }
+  history.replaceState(null, '', location.pathname);
+  const o = incoming;
+  showSheet(`<h2>Trip shared with you</h2><ul class="sub">${o.w ? `<li>${o.w.length} waypoints</li>` : ''}${o.r ? `<li>${o.r.length} routes</li>` : ''}${o.p ? `<li>${o.p.length} permitted properties</li>` : ''}${o.t ? `<li>Plan: ${esc(o.t.where || '')}${o.t.out ? ', leaving ' + esc(new Date(o.t.out).toLocaleString('en-NZ')) : ''}${o.t.back ? ', back ' + esc(new Date(o.t.back).toLocaleString('en-NZ')) : ''}${o.t.car ? ', vehicle ' + esc(o.t.car) : ''}</li>` : ''}</ul>
+    <div class="btnrow"><button class="btn" data-act="importTrip">Add to my map</button><button class="btn ghost" data-act="welcomeOk">Ignore</button></div>`, { kind: 'import' });
+}
+actions.importTrip = async () => {
+  const o = incoming || {}; const bb = [180, 90, -180, -90]; const ext = (x, y) => { bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], y); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], y); };
+  for (const w of o.w || []) { const x = { id: uid(), name: w[0], type: WP_TYPES[w[1]] ? w[1] : 'note', lng: w[2], lat: w[3], note: (w[4] ? w[4] + ' · ' : '') + 'shared', t: Date.now() }; state.wps.push(x); ext(x.lng, x.lat); await DB.put('wps', x).catch(() => {}); }
+  for (const p of o.p || []) { const x = { id: uid(), name: 'Permission: ' + p[0], type: 'access', lng: p[1], lat: p[2], note: 'shared', t: Date.now() }; state.wps.push(x); ext(x.lng, x.lat); await DB.put('wps', x).catch(() => {}); }
+  for (const r of o.r || []) { const x = { id: uid(), name: r[0] + ' (shared)', pts: r[1], dist: trackLen(r[1]), climb: null, desc: null, t: Date.now() }; state.routes.push(x); r[1].forEach(q => ext(q[0], q[1])); await DB.put('routes', x).catch(() => {}); }
+  if (o.t) LS.set('trip', Object.assign(LS.get('trip', {}), { where: o.t.where, out: o.t.out, back: o.t.back, car: o.t.car }));
+  renderWps(); renderRoutes(); state.vis.routes = state.vis.wps = true; LS.set('vis', state.vis); applyVisibility();
+  if (bb[0] < 180) map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 60, maxZoom: 14 });
+  incoming = null; closeSheet(); toast('Shared trip added');
+};
+actions.mArc = () => arcSheet();
+actions.mTrack = trackSheet;
+
 /* ---------------- start-up ---------------- */
 (async () => {
   try {
-    [state.areas, state.wps, state.perms] = await Promise.all([DB.all('areas'), DB.all('wps'), DB.all('perms')]);
+    [state.areas, state.wps, state.perms, state.tracks, state.routes, state.log] = await Promise.all(['areas', 'wps', 'perms', 'tracks', 'routes', 'log'].map(st => DB.all(st)));
   } catch { /* storage unavailable: app still works online */ }
-  renderWps(); addAccessPins(); scheduleRefresh();
-  if (!LS.get('welcomed', false)) {
+  renderWps(); renderRoutes(); renderLog(); addAccessPins(); scheduleRefresh(); renderCheckin(); updateNav();
+  const unfinished = state.tracks.find(t => !t.end); if (unfinished) { unfinished.end = unfinished.pts.length ? unfinished.pts[unfinished.pts.length - 1][3] : unfinished.start; DB.put('tracks', unfinished).catch(() => {}); }
+  checkIncoming();
+  if (!LS.get('welcomed', false) && !/^#trip=/.test(location.hash)) {
     showSheet(`<h2>Hunt Access NZ</h2><p>Tap anywhere on the map to see who owns or manages the land and whether you can hunt there.</p>
       <ul class="sub"><li><b>Dark green</b>: DOC land</li><li><b>Lime</b>: huntable with just a DOC permit (amber: restricted or ballot; red stripes: no hunting)</li><li><b>Orange</b>: legal and paper roads. <b>Blue</b>: other public access to travel through</li><li><b>Rose</b>: everything else, which needs landowner permission (zoom 13+)</li></ul>
       <p class="sub">Before a trip, use <b>Offline maps</b> to save the area so status checks work with no signal. Turn on the location button for live status and boundary alerts.</p>
