@@ -370,9 +370,10 @@ function addOverlays() {
   const add = l => { if (!map.getLayer(l.id)) map.addLayer(l); };
   const addF = (id, source, colour, op, extra = {}) => { BASE_OP[id] = op; add({ id, type: 'fill', source, ...extra, paint: { 'fill-color': colour, 'fill-opacity': opOf(id) } }); };
   add({ id: 'fade-f', type: 'fill', source: 'fade', layout: { visibility: state.fade > 0 ? 'visible' : 'none' }, paint: { 'fill-color': '#ffffff', 'fill-opacity': state.fade } });
-  add({ id: 'hill-r', type: 'raster', source: 'hill', paint: { 'raster-opacity': 0.4 } });
-  add({ id: 'slope-r', type: 'raster', source: 'slope', minzoom: 10, paint: { 'raster-opacity': 0.85 } });
-  add({ id: 'sun-r', type: 'raster', source: 'sun', minzoom: 10, paint: { 'raster-opacity': 0.8 } });
+  const vis = k => ({ visibility: state.vis[k] ? 'visible' : 'none' });   // start hidden unless switched on
+  add({ id: 'hill-r', type: 'raster', source: 'hill', layout: vis('hill'), paint: { 'raster-opacity': 0.4 } });
+  add({ id: 'slope-r', type: 'raster', source: 'slope', minzoom: 10, layout: vis('slope'), paint: { 'raster-opacity': 0.85 } });
+  add({ id: 'sun-r', type: 'raster', source: 'sun', minzoom: 10, layout: vis('sun'), paint: { 'raster-opacity': 0.8 } });
   // 4. needs landowner permission (derived from parcels not covered by public land)
   addF('priv-f', 'priv', ['match', ['get', 'cls'], 'maori', PAL.maori, 'river', PAL.river, 'check', PAL.check, PAL.priv], 0.28, { minzoom: 13 });
   // 1. DOC land
@@ -432,7 +433,6 @@ function layerVisible(L) { return L.group === 'species' ? !!state.sp[L.sp.key] :
 const PRIV_NEEDS = ['pcl', 'hunt', 'paa', 'parcels'];
 function layerNeeded(L) { return layerVisible(L) || (state.vis.priv && PRIV_NEEDS.includes(L.group)); }
 function applyVisibility() {
-  if (!map.isStyleLoaded()) return;
   for (const L of LAYERS) {
     const v = layerVisible(L) ? 'visible' : 'none';
     for (const suf of ['-f', '-l', '-c', '-p']) if (map.getLayer(L.id + suf)) map.setLayoutProperty(L.id + suf, 'visibility', v);
@@ -1198,7 +1198,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.7 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.7.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
