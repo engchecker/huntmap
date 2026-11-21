@@ -488,27 +488,42 @@ map.on('click', e => {
   identify(p);
 });
 
+const SRC_NAME = { hunt: 'DOC hunting areas', pcl: 'DOC land', road: 'legal roads', ease: 'easements', res: 'reserves', parks: 'council parks', other: 'other public access', pestWill: 'pesticide', pestHave: 'pesticide', parcels: 'property boundaries', titles: 'titles' };
+async function retry(fn, tries = 2) { let err; for (let i = 0; i < tries; i++) { try { return await fn(); } catch (e) { err = e; if (i < tries - 1) await sleep(800); } } throw err; }
 async function identifyOnline(p) {
-  const q = (L, geom = false) => agsQuery(L.url, pointParams(p, L, geom), { pages: 1, timeout: 12000, rec: 20 }).then(fc => fc.features);
+  const q = (L, geom = false, tries = 1) => retry(() => agsQuery(L.url, pointParams(p, L, geom), { pages: 1, timeout: 25000, rec: 20 }), tries).then(fc => fc.features);
   const keys = ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'pestWill', 'pestHave'];
+  // land queries first (critical), animals afterwards so they can't crowd the connection
   const proms = keys.map(k => q(LBY[k]));
-  proms.push(q(LBY.parcels, true));
-  proms.push(agsQuery(URLS.titles, { geometry: p.join(','), geometryType: 'esriGeometryPoint', inSR: 4326, spatialRel: 'esriSpatialRelIntersects', outFields: 'title_no,type,estate_description,number_owners,guarantee_status', returnGeometry: false }, { pages: 1, rec: 10 }).then(fc => fc.features));
+  proms.push(q(LBY.parcels, true, 2));
+  proms.push(retry(() => agsQuery(URLS.titles, { geometry: p.join(','), geometryType: 'esriGeometryPoint', inSR: 4326, spatialRel: 'esriSpatialRelIntersects', outFields: 'title_no,type,estate_description,number_owners,guarantee_status', returnGeometry: false }, { pages: 1, rec: 10, timeout: 25000 }), 2).then(fc => fc.features));
+  const res = await Promise.allSettled(proms);
+  if (res.every(r => r.status === 'rejected')) throw new Error('offline');
   const spProms = SPECIES.map(s => {
     const qs = new URLSearchParams({ f: 'json', where: "PA='Presence'", geometry: p.join(','), geometryType: 'esriGeometryPoint', inSR: 4326, spatialRel: 'esriSpatialRelIntersects', returnCountOnly: true });
-    return fetchT(LBY['sp_' + s.key].url + '/query?' + qs, 12000).then(r => r.json()).then(j => { if (j.error) throw 0; return j.count > 0 ? s.key : null; });
+    return fetchT(LBY['sp_' + s.key].url + '/query?' + qs, 20000).then(r => r.json()).then(j => { if (j.error) throw 0; return j.count > 0 ? s.key : null; });
   });
-  const res = await Promise.allSettled(proms), spr = await Promise.allSettled(spProms);
-  if (res.every(r => r.status === 'rejected')) throw new Error('offline');
+  const spr = await Promise.allSettled(spProms);
   const g = i => (res[i].status === 'fulfilled' ? res[i].value : []);
   const props = i => g(i).map(f => f.properties);
-  const out = { src: 'live' };
-  keys.forEach((k, i) => { out[k] = props(i); });
-  out.parcel = g(keys.length); out.title = props(keys.length + 1).length ? props(keys.length + 1) : [];
+  const out = { src: 'live', failed: [] };
+  keys.forEach((k, i) => { out[k] = props(i); if (res[i].status === 'rejected') out.failed.push(k); });
+  out.parcel = g(keys.length); if (res[keys.length].status === 'rejected') out.failed.push('parcels');
+  out.title = props(keys.length + 1); if (res[keys.length + 1].status === 'rejected') out.failed.push('titles');
   out.species = spr.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
   out.speciesKnown = spr.some(r => r.status === 'fulfilled');
-  out.partial = res.some(r => r.status === 'rejected');
   return out;
+}
+/* Fill anything the live lookup missed from data already loaded for the map (same sources). */
+function mergeLocal(r, local) {
+  const keys = ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'pestWill', 'pestHave', 'parcel'];
+  let used = false;
+  for (const k of keys) if ((!r[k] || !r[k].length) && local[k] && local[k].length) { r[k] = local[k]; used = true; }
+  if (!r.speciesKnown && local.speciesKnown) { r.species = local.species; r.speciesKnown = true; used = true; }
+  r.failed = (r.failed || []).filter(k => !(k === 'parcels' ? r.parcel.length : (r[k] && r[k].length)));
+  if (r.parcel.length && r.parcel[0].properties && r.parcel[0].properties.titles) r.failed = r.failed.filter(k => k !== 'titles');
+  r.partial = r.failed.length > 0; r.usedLocal = used;
+  return r;
 }
 function identifyLocal(p) {
   const out = { src: 'offline', title: [], species: [], speciesKnown: false, coverage: false };
@@ -556,16 +571,16 @@ function classify(r) {
     return { cat: 'private', title: 'Private land — permission required', text: 'You need the landowner’s permission to go on or hunt. No permission, no access.' };
   }
   if (r.src === 'offline' && !r.coverage) return { cat: 'unknown', title: 'No offline data here', text: 'Save this area for offline use when you have signal.' };
-  return { cat: 'unknown', title: 'Land status not found', text: map.getZoom() < 14 ? 'Zoom in to 14+ and tap again to load property boundaries.' : 'No parcel or DOC data returned for this spot.' };
+  return { cat: 'unknown', title: 'Land status not found', text: r.partial ? 'The property lookup didn’t respond. Tap Retry below, or zoom in to 13+ so boundaries load on the map, then tap again.' : map.getZoom() < 13 ? 'Zoom in to 13+ and tap again to load property boundaries.' : 'No parcel or DOC data recorded for this spot.' };
 }
 const VCLS = { ok: 'v-ok', restricted: 'v-restricted', no: 'v-no', private: 'v-private', road: 'v-road', access: 'v-access', unknown: 'v-unknown' };
 
 async function identify(p) {
   setTarget(p);
   showSheet(`<h2>Checking this spot…</h2><p class="sub">${p[1].toFixed(5)}, ${p[0].toFixed(5)}</p>`, { kind: 'id' });
-  let r = null;
-  if (online()) { try { r = await identifyOnline(p); } catch { r = null; } }
-  if (!r) r = identifyLocal(p);
+  let r = null; const local = identifyLocal(p);
+  if (online()) { try { r = mergeLocal(await identifyOnline(p), local); } catch { r = null; } }
+  if (!r) r = local;
   if (!state.target || state.target[0] !== p[0] || state.target[1] !== p[1]) return;
   const pf = r.parcel && r.parcel[0];
   setData('sel', pf && pf.geometry ? pf : EMPTY);
@@ -575,7 +590,8 @@ function renderIdentify(p, r) {
   const v = classify(r);
   const [E, N] = llToNZTM(p[0], p[1]);
   let h = `<div class="verdict ${VCLS[v.cat]}"><div><b>${esc(v.title)}</b><span>${esc(v.text)}</span></div></div>`;
-  h += `<p class="sub">${p[1].toFixed(5)}, ${p[0].toFixed(5)} · NZTM ${Math.round(E)} E ${Math.round(N)} N${r.src === 'offline' ? ' · <b>offline data</b>' : ''}${r.partial ? ' · some sources didn’t respond' : ''}</p>`;
+  h += `<p class="sub">${p[1].toFixed(5)}, ${p[0].toFixed(5)} · NZTM ${Math.round(E)} E ${Math.round(N)} N${r.src === 'offline' ? ' · <b>offline data</b>' : ''}</p>`;
+  if (r.partial) h += `<div class="warnbox">Couldn’t reach: ${[...new Set(r.failed.map(k => SRC_NAME[k] || k))].join(', ')}. The verdict may be incomplete. <button class="btn small" data-act="reId" data-lng="${p[0]}" data-lat="${p[1]}">Retry</button></div>`;
   if (state.me) { const me = [state.me.lng, state.me.lat]; h += `<p class="sub">From you: <b>${fmtDist(distM(me, p))}</b> ${compass(bearing(me, p))} (${Math.round(bearing(me, p))}° true)</p>`; }
 
   const h0 = r.hunt && r.hunt[0];
@@ -628,6 +644,7 @@ function renderIdentify(p, r) {
     <p class="sub">Driving apps route you to the nearest road. Don’t drive or walk across private land unless you have permission.</p>`;
   showSheet(h, { kind: 'id' });
 }
+actions.reId = b => identify([+b.dataset.lng, +b.dataset.lat]);
 actions.lrs = async b => { try { await navigator.clipboard.writeText(b.dataset.title); toast('Title ' + b.dataset.title + ' copied'); } catch {} window.open(LINKS.lrs, '_blank', 'noopener'); };
 actions.copy = async b => { try { await navigator.clipboard.writeText(b.dataset.text); toast('Copied'); } catch { toast(b.dataset.text); } };
 actions.saveWp = b => wpForm([+b.dataset.lng, +b.dataset.lat]);
@@ -1081,7 +1098,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.2 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.2.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
