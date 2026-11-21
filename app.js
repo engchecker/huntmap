@@ -15,6 +15,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const online = () => navigator.onLine !== false;
 function fetchT(url, ms = 15000, opts = {}) {
   const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
+  const ext = opts.signal; if (ext) { if (ext.aborted) c.abort(); else ext.addEventListener('abort', () => c.abort(), { once: true }); }
   return fetch(url, { ...opts, signal: c.signal }).finally(() => clearTimeout(t));
 }
 function toast(msg, ms = 3200) {
@@ -154,7 +155,7 @@ const LAYERS = [
   { id: 'res', group: 'paa', minz: 11, url: PAA + '3', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
   { id: 'parks', group: 'paa', minz: 11, url: PAA + '5', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
   { id: 'other', group: 'paa', minz: 11, url: PAA + '6', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
-  { id: 'parcels', group: 'parcels', minz: 13, url: LINZ + 'LINZ_NZ_Primary_Parcels/FeatureServer/0', fields: 'appellation,parcel_intent,land_district,titles,calc_area', pages: 8 },
+  { id: 'parcels', group: 'parcels', minz: 13, url: LINZ + 'LINZ_NZ_Primary_Parcels/FeatureServer/0', fields: 'appellation,parcel_intent,land_district,titles,calc_area', pages: 5 },
   { id: 'pestWill', group: 'pest', minz: 7, url: DOC + 'Pesticides_WillBeLaid_HFV/FeatureServer/0', fields: 'BlockName,Pesticide,PesticideTradeName,MethodName,StartDate,FinishDate,LeadAgency,CautionPeriod' },
   { id: 'pestHave', group: 'pest', minz: 7, url: DOC + 'Pesticides_HaveBeenLaid_HFV/FeatureServer/0', fields: 'BlockName,Pesticide,PesticideTradeName,MethodName,StartDate,FinishDate,LeadAgency,CautionPeriod' },
   { id: 'huts', group: 'huts', minz: 9, url: DOC + 'DOC_Huts_Open_Data/FeatureServer/0', fields: '*' },
@@ -224,12 +225,20 @@ const DB = {
 
 /* ---------------- ArcGIS queries ---------------- */
 function simplifyDeg(z, lat) { return (156543.03 * Math.cos(lat * rad) / 2 ** z) / 111320; }
-async function agsQuery(url, params, { pages = 4, timeout = 20000, rec = 1000 } = {}) {
+const agsMemo = new Map();   // recent query results, so panning back and forth doesn't re-download
+async function agsQuery(url, params, { pages = 4, timeout = 20000, rec = 1000, signal } = {}) {
   const base = { f: 'geojson', outSR: 4326, where: '1=1', outFields: '*', ...params };
+  const mk = url + '|' + JSON.stringify(base) + '|' + pages + '|' + rec, hit = agsMemo.get(mk);
+  if (hit && Date.now() - hit.t < 15 * 60000) { agsMemo.delete(mk); agsMemo.set(mk, hit); return hit.fc; }
+  const fc = await agsFetch(url, base, pages, timeout, rec, signal);
+  agsMemo.set(mk, { t: Date.now(), fc }); if (agsMemo.size > 40) agsMemo.delete(agsMemo.keys().next().value);
+  return fc;
+}
+async function agsFetch(url, base, pages, timeout, rec, signal) {
   let all = [], offset = 0;
   for (let p = 0; p < pages; p++) {
     const q = new URLSearchParams({ ...base, resultOffset: offset, resultRecordCount: rec });
-    const r = await fetchT(url + '/query?' + q, timeout);
+    const r = await fetchT(url + '/query?' + q, timeout, { signal });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     if (j.error) throw new Error(j.error.message || 'Query error');
@@ -265,7 +274,8 @@ function styleFor(b) {
 }
 const map = new maplibregl.Map({
   container: 'map', style: styleFor(state.base), center: view.c, zoom: view.z, maxZoom: 19,
-  attributionControl: false, dragRotate: false, pitchWithRotate: false, touchPitch: false
+  attributionControl: false, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+  pixelRatio: Math.min(window.devicePixelRatio || 1, 2), refreshExpiredTiles: false, fadeDuration: 150
 });
 map.touchZoomRotate.disableRotation();
 map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: 'DOC, LINZ, Herenga ā Nuku — CC BY 4.0' }), 'bottom-left');
@@ -297,12 +307,14 @@ function stripes(colour) {
 const opOf = id => Math.min(0.92, BASE_OP[id] * state.strength);
 function applyPaint() {
   for (const id in BASE_OP) if (map.getLayer(id)) map.setPaintProperty(id, 'fill-opacity', opOf(id));
-  if (map.getLayer('fade-f')) map.setPaintProperty('fade-f', 'fill-opacity', state.fade);
+  if (map.getLayer('fade-f')) { map.setPaintProperty('fade-f', 'fill-opacity', state.fade); map.setLayoutProperty('fade-f', 'visibility', state.fade > 0 ? 'visible' : 'none'); }
 }
 function addOverlays() {
-  const src = id => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: (state.loaded[id] && state.loaded[id].fc) || EMPTY }); };
+  const GJ = { maxzoom: 15, tolerance: 0.5, buffer: 48 };
+  const src = id => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: (state.loaded[id] && state.loaded[id].fc) || EMPTY, ...GJ }); };
   LAYERS.forEach(L => src(L.id));
-  ['sel', 'acc', 'tline', 'wps', 'priv', 'arc', 'scent', 'rte', 'routes', 'trk', 'log'].forEach(src);
+  if (!map.getSource('priv')) map.addSource('priv', { type: 'geojson', data: EMPTY, ...GJ });
+  ['sel', 'acc', 'tline', 'wps', 'arc', 'scent', 'rte', 'routes', 'trk', 'log'].forEach(src);
   if (!map.getSource('hot')) map.addSource('hot', { type: 'geojson', data: hotFC() });
   const rsrc = (id, tiles, maxzoom) => { if (!map.getSource(id)) map.addSource(id, { type: 'raster', tiles: [tiles], tileSize: 256, maxzoom }); };
   rsrc('hill', hillURL(), 15); rsrc('slope', 'terrain://{z}/{x}/{y}?m=slope', 14); rsrc('sun', 'terrain://{z}/{x}/{y}?m=sun', 14);
@@ -310,7 +322,7 @@ function addOverlays() {
   if (!map.hasImage('noHunt')) map.addImage('noHunt', stripes('#dc2626'));
   const add = l => { if (!map.getLayer(l.id)) map.addLayer(l); };
   const addF = (id, source, colour, op, extra = {}) => { BASE_OP[id] = op; add({ id, type: 'fill', source, ...extra, paint: { 'fill-color': colour, 'fill-opacity': opOf(id) } }); };
-  add({ id: 'fade-f', type: 'fill', source: 'fade', paint: { 'fill-color': '#ffffff', 'fill-opacity': state.fade } });
+  add({ id: 'fade-f', type: 'fill', source: 'fade', layout: { visibility: state.fade > 0 ? 'visible' : 'none' }, paint: { 'fill-color': '#ffffff', 'fill-opacity': state.fade } });
   add({ id: 'hill-r', type: 'raster', source: 'hill', paint: { 'raster-opacity': 0.4 } });
   add({ id: 'slope-r', type: 'raster', source: 'slope', minzoom: 10, paint: { 'raster-opacity': 0.85 } });
   add({ id: 'sun-r', type: 'raster', source: 'sun', minzoom: 10, paint: { 'raster-opacity': 0.8 } });
@@ -356,16 +368,16 @@ function addOverlays() {
   add({ id: 'rte-c', type: 'circle', source: 'rte', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': '#ff6a13', 'circle-stroke-width': 2 } });
   add({ id: 'huts-c', type: 'circle', source: 'huts', minzoom: 9, paint: { 'circle-radius': 6, 'circle-color': '#b91c1c', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   add({ id: 'camps-c', type: 'circle', source: 'camps', minzoom: 9, paint: { 'circle-radius': 6, 'circle-color': '#0f766e', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
-  add({ id: 'hot-h', type: 'heatmap', source: 'hot', maxzoom: 14, paint: {
+  add({ id: 'hot-h', type: 'heatmap', source: 'hot', maxzoom: 12, paint: {
     'heatmap-weight': ['get', 'w'],
     'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 9, 1.3],
-    'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 4, ['*', 16, ['get', 's']], 7, ['*', 40, ['get', 's']], 10, ['*', 115, ['get', 's']], 13, ['*', 330, ['get', 's']]],
+    'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 4, ['*', 16, ['get', 's']], 7, ['*', 40, ['get', 's']], 10, ['*', 100, ['get', 's']], 12, ['*', 180, ['get', 's']]],
     'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(255,255,178,0)', 0.15, 'rgba(254,217,118,0.55)', 0.4, 'rgba(253,141,60,0.7)', 0.7, 'rgba(240,59,32,0.8)', 1, 'rgba(189,0,38,0.88)'],
-    'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.85, 13, 0.3] } });
+    'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.85, 12, 0.35] } });
   add({ id: 'hot-c', type: 'circle', source: 'hot', minzoom: 7, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 5, 12, 9], 'circle-color': '#bd0026', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2, 'circle-opacity': 0.9 } });
   add({ id: 'log-c', type: 'circle', source: 'log', paint: { 'circle-radius': 6, 'circle-color': ['match', ['get', 'kind'], 'kill', '#be123c', '#f59e0b'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
   add({ id: 'wps-c', type: 'circle', source: 'wps', paint: { 'circle-radius': 7, 'circle-color': ['get', 'colour'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
-  applyVisibility(); updateHeat(); renderWps(); renderRoutes(); renderLog(); updateAcc(); updateTargetLine(); computePriv();
+  applyVisibility(); updateHeat(); renderWps(); renderRoutes(); renderLog(); updateAcc(); updateTargetLine(); privDirty = true; computePriv();
 }
 map.on('style.load', addOverlays);
 
@@ -383,12 +395,12 @@ function applyVisibility() {
   for (const [id, k] of [['hill-r', 'hill'], ['slope-r', 'slope'], ['sun-r', 'sun'], ['routes-l', 'routes'], ['log-c', 'log']]) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', state.vis[k] ? 'visible' : 'none');
   accessMarkers.forEach(m => { m.getElement().style.display = state.vis.access ? '' : 'none'; });
 }
-function setData(id, fc) { const s = map.getSource(id); if (s) s.setData(fc); if (PUBLIC_IDS.includes(id) || id === 'parcels') schedulePriv(); }
+function setData(id, fc) { const s = map.getSource(id); if (s) s.setData(fc); if (PUBLIC_IDS.includes(id) || id === 'parcels') { privDirty = true; if (!state.refreshing) schedulePriv(); } }
 
 /* "needs landowner permission": parcels whose interior isn't DOC land or public access */
 const PUBLIC_IDS = ['pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other'];
-let privTimer = null;
-function schedulePriv() { clearTimeout(privTimer); privTimer = setTimeout(computePriv, 200); }
+let privTimer = null, privDirty = true;
+function schedulePriv() { clearTimeout(privTimer); privTimer = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(computePriv, { timeout: 600 }) : computePriv()), 150); }
 function fbbox(f) {
   if (f._bb) return f._bb; const a = [180, 90, -180, -90];
   const walk = c => { if (typeof c[0] === 'number') { if (c[0] < a[0]) a[0] = c[0]; if (c[1] < a[1]) a[1] = c[1]; if (c[0] > a[2]) a[2] = c[0]; if (c[1] > a[3]) a[3] = c[1]; } else c.forEach(walk); };
@@ -412,17 +424,22 @@ function parcelCls(i) {
 let lastPriv = [];
 function privFeatures(pf, pubFeats) {
   const pub = pubFeats.filter(f => f.geometry && /Polygon/.test(f.geometry.type)), out = [];
+  // bucket public polygons into a ~1 km grid so each parcel only tests nearby ones
+  const G = 0.01, grid = new Map(), key = (i, j) => i * 100003 + j;
+  for (const q of pub) { const b = fbbox(q); for (let i = Math.floor(b[0] / G); i <= Math.floor(b[2] / G); i++) for (let j = Math.floor(b[1] / G); j <= Math.floor(b[3] / G); j++) { const k = key(i, j); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(q); if ((b[2] - b[0]) * (b[3] - b[1]) > 4) break; } }
   for (const f of (pf && pf.features) || []) {
     if (!f.geometry || !/Polygon/.test(f.geometry.type)) continue;
     const cls = parcelCls((f.properties && f.properties.parcel_intent) || ''); if (!cls) continue;
-    const p = innerPoint(f); let isPub = false;
-    for (const q of pub) { const b = fbbox(q); if (p[0] < b[0] || p[0] > b[2] || p[1] < b[1] || p[1] > b[3]) continue; if (featContains(q, p)) { isPub = true; break; } }
+    const p = f._ip || (f._ip = innerPoint(f)); let isPub = false;
+    const cand = grid.get(key(Math.floor(p[0] / G), Math.floor(p[1] / G))) || [];
+    for (const q of cand) { const b = fbbox(q); if (p[0] < b[0] || p[0] > b[2] || p[1] < b[1] || p[1] > b[3]) continue; if (featContains(q, p)) { isPub = true; break; } }
     if (!isPub) out.push({ type: 'Feature', geometry: f.geometry, properties: { cls } });
   }
   return out;
 }
 function computePriv() {
   if (!map.getSource('priv')) return;
+  if (!privDirty && computePriv.vis === state.vis.priv) return; privDirty = false; computePriv.vis = state.vis.priv;
   const pf = state.loaded.parcels && state.loaded.parcels.fc;
   const pub = PUBLIC_IDS.flatMap(id => (state.loaded[id] && state.loaded[id].fc) ? state.loaded[id].fc.features : []);
   lastPriv = pf ? privFeatures(pf, pub) : [];
@@ -443,20 +460,25 @@ function offlineFC(id, b) {
 }
 let refreshTimer = null;
 function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refreshData, 350); }
+const inflight = {};
 async function refreshData() {
   const z = map.getZoom(), vb = viewBBox(0), fb = viewBBox(0.35), lat = map.getCenter().lat, gen = ++state.gen;
-  const jobs = [];
+  const jobs = []; state.refreshing = true;
   for (const L of LAYERS) {
     if (!layerNeeded(L) || z < L.minz) continue;
     const st = state.loaded[L.id], zb = zBucket(z);
     if (st && bboxContains(st.bbox, vb) && st.zb >= Math.min(zb, L.group === 'species' ? 9 : 15)) continue;
     if (!online()) { const fc = offlineFC(L.id, vb); state.loaded[L.id] = { bbox: vb, zb: 99, fc, off: true }; setData(L.id, fc); continue; }
     const sz = L.group === 'species' ? Math.min(zb, 9) : zb;
-    jobs.push(agsQuery(L.url, bboxParams(fb, L, sz, lat), { pages: L.pages || 4, rec: L.max || 1000 })
+    if (inflight[L.id]) inflight[L.id].abort();
+    const ac = inflight[L.id] = new AbortController();
+    jobs.push(agsQuery(L.url, bboxParams(fb, L, sz, lat), { pages: L.pages || 4, rec: L.max || 1000, signal: ac.signal })
+      .finally(() => { if (inflight[L.id] === ac) delete inflight[L.id]; })
       .then(fc => { if (gen !== state.gen && state.loaded[L.id] && bboxContains(state.loaded[L.id].bbox, vb)) return; state.loaded[L.id] = { bbox: fb, zb: sz, fc }; setData(L.id, fc); })
-      .catch(() => { const fc = offlineFC(L.id, vb); if (fc.features.length) { state.loaded[L.id] = { bbox: vb, zb: 99, fc, off: true }; setData(L.id, fc); } }));
+      .catch(err => { if (ac.signal.aborted) return; const fc = offlineFC(L.id, vb); if (fc.features.length) { state.loaded[L.id] = { bbox: vb, zb: 99, fc, off: true }; setData(L.id, fc); } }));
   }
   if (jobs.length) await Promise.allSettled(jobs);
+  if (gen === state.gen) { state.refreshing = false; if (privDirty) schedulePriv(); }
 }
 map.on('moveend', () => { const c = map.getCenter(); LS.set('view', { c: [c.lng, c.lat], z: map.getZoom() }); scheduleRefresh(); });
 map.on('load', scheduleRefresh);
@@ -1004,10 +1026,13 @@ sheetBody.addEventListener('change', e => { if (e.target.dataset && e.target.dat
 actions.areaGo = b => { const a = state.areas.find(x => x.id === b.dataset.id); if (a) { map.fitBounds([[a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[3]]], { padding: 20 }); closeSheet(); } };
 actions.areaDel = async b => {
   const a = state.areas.find(x => x.id === b.dataset.id); if (!a || !(await confirmDlg(`Delete “${a.name}” from this device?`, 'Delete'))) return;
-  state.areas = state.areas.filter(x => x !== a); await DB.del('areas', a.id).catch(() => {});
+  state.areas = state.areas.filter(x => x !== a);
   try {
-    const keep = new Set(); state.areas.forEach(x => (x.keys || []).forEach(k => keep.add(k)));
-    const c = await caches.open('tiles-v1'); for (const k of a.keys || []) if (!keep.has(k)) await c.delete(k);
+    // tile lists aren't kept in memory (they can be large), so read them back from storage
+    const stored = await DB.all('areas'), mine = (stored.find(x => x.id === a.id) || a).keys || [];
+    await DB.del('areas', a.id).catch(() => {});
+    const keep = new Set(); stored.filter(x => x.id !== a.id).forEach(x => (x.keys || []).forEach(k => keep.add(k)));
+    const c = await caches.open('tiles-v1'); for (const k of mine) if (!keep.has(k)) await c.delete(k);
   } catch {}
   toast('Area deleted'); offlineSheet();
 };
@@ -1084,7 +1109,7 @@ actions.dlStart = async () => {
     await Promise.all(Array.from({ length: 6 }, worker));
     if (dl.cancel) throw new Error('cancelled');
     area.tiles = uniq.length; area.failed = fail;
-    await DB.put('areas', area); state.areas.push(area);
+    await DB.put('areas', area); area.nKeys = area.keys.length; delete area.keys; state.areas.push(area);
     prog(1, `Saved “${name}”: ${uniq.length.toLocaleString()} tiles${fail ? ', ' + fail + ' failed (try again to fill gaps)' : ''}.`);
     toast('Offline area saved');
     const al = $('#areaList'); if (al) al.innerHTML = areaListHtml();
@@ -1130,7 +1155,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.5 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.5.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -1814,9 +1839,11 @@ window.__hamAPI = { map, state, actions, LS, showSheet, closeSheet, toast, demTi
 /* ---------------- start-up ---------------- */
 (async () => {
   try {
-    [state.areas, state.wps, state.perms, state.tracks, state.routes, state.log] = await Promise.all(['areas', 'wps', 'perms', 'tracks', 'routes', 'log'].map(st => DB.all(st)));
+    [state.wps, state.perms, state.tracks, state.routes, state.log] = await Promise.all(['wps', 'perms', 'tracks', 'routes', 'log'].map(st => DB.all(st)));
   } catch { /* storage unavailable: app still works online */ }
-  renderWps(); renderRoutes(); renderLog(); addAccessPins(); scheduleRefresh(); renderCheckin(); updateNav();
+  renderWps(); renderRoutes(); renderLog(); addAccessPins(); renderCheckin(); updateNav();
+  try { state.areas = await DB.all('areas'); for (const a of state.areas) if (a.keys) { a.nKeys = a.keys.length; delete a.keys; } } catch {}
+  scheduleRefresh();
   const unfinished = state.tracks.find(t => !t.end); if (unfinished) { unfinished.end = unfinished.pts.length ? unfinished.pts[unfinished.pts.length - 1][3] : unfinished.start; DB.put('tracks', unfinished).catch(() => {}); }
   checkIncoming();
   if (!LS.get('welcomed', false) && !/^#trip=/.test(location.hash)) {
