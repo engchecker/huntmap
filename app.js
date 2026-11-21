@@ -1097,6 +1097,7 @@ $('#btnOffline').onclick = () => (sheetKind === 'offline' && !sheet.hidden ? clo
 /* ---------------- menu & settings ---------------- */
 function menuSheet() {
   showSheet(`<h2>Tools</h2><div class="menu">
+    <button data-act="mFind"><span>🔎</span><span>Find animals<small>Likely spots from behaviour, terrain, cover, sun and wind</small></span></button>
     <button data-act="mArc"><span>🎯</span><span>Shooting arc check<small>What’s in your line of fire</small></span></button>
     <button data-act="mTrack"><span>🛻</span><span>Track &amp; back to the truck<small>Record your route, arrow back to any point</small></span></button>
     <button data-act="mRoute"><span>⛰</span><span>Route planner<small>Distance, climb and elevation profile</small></span></button>
@@ -1129,7 +1130,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.4 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.5 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -1233,7 +1234,7 @@ function hotSheet(id) {
     <ul class="list">${rows}</ul>
     <p>${esc(h.note)}</p>
     <dl class="kv"><dt>Access</dt><dd>${esc(h.access)}</dd></dl>
-    <div class="btnrow"><button class="btn" data-act="hotGo" data-id="${h.id}">Zoom to area</button><a class="btn ghost" href="${LINKS.docPermit}" target="_blank" rel="noopener">DOC permit</a><button class="btn ghost" data-act="hotList">All hotspots</button></div>
+    <div class="btnrow"><button class="btn" data-act="hotGo" data-id="${h.id}">Zoom to area</button><a class="btn ghost" href="${LINKS.docPermit}" target="_blank" rel="noopener">DOC permit</a><button class="btn ghost" data-act="hotList">All hotspots</button><button class="btn ghost" data-act="findFromHot" data-id="${h.id}">Find animals here</button></div>
     <h3>Sources</h3><ul class="sub">${h.src.map(u => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60))}…</a></li>`).join('')}</ul>
     <p class="sub">${esc(window.HOTSPOT_NOTE || '')}</p>`, { kind: 'hot' });
 }
@@ -1806,6 +1807,9 @@ actions.importTrip = async () => {
 };
 actions.mArc = () => arcSheet();
 actions.mTrack = trackSheet;
+
+/* internals for the habitat model (model.js) */
+window.__hamAPI = { map, state, actions, LS, showSheet, closeSheet, toast, demTile, sunTimes, BM, distM, bearing, compass, fmtDist, fmtTime, fmtDate, esc, fetchT, online, SPECIES, setNav, setTarget, getWind: () => lastWind, setWind: w => { lastWind = w; }, resolveStyle, mkCanvas };
 
 /* ---------------- start-up ---------------- */
 (async () => {

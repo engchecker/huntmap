@@ -1,9 +1,9 @@
 /* Hunt Access NZ service worker: app shell + map tile caching for offline use. */
-const SHELL = 'shell-v6';
+const SHELL = 'shell-v7';
 const TILES = 'tiles-v1';      // tiles saved deliberately via "Offline maps"
 const RT = 'tiles-rt';         // tiles seen while browsing (trimmed)
 const RT_MAX = 4000;
-const ASSETS = ['./', 'index.html', 'app.css', 'app.js', 'data.js', 'hotspots.js', 'manifest.webmanifest',
+const ASSETS = ['./', 'index.html', 'app.css', 'app.js', 'data.js', 'hotspots.js', 'behaviour.js', 'model.js', 'vendor/vt.js', 'manifest.webmanifest',
   'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

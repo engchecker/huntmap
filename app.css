@@ -119,3 +119,8 @@ input[type=range]{width:100%;height:40px;accent-color:var(--blaze);margin:0 0 6p
 #checkin span{flex:1 1 100%}
 #checkin button{min-height:36px;padding:0 12px;border-radius:18px;border:0;background:rgba(255,255,255,.2);color:#fff;font-weight:600;font-size:13px;cursor:pointer}
 .wind div[data-act]:focus-visible{outline:3px solid var(--blaze)}
+
+/* Find animals */
+.findpin{width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:#b91c1c;color:#fff;font:700 14px/24px system-ui,sans-serif;text-align:center;padding:0;box-shadow:0 1px 4px rgba(0,0,0,.45);cursor:pointer}
+.sheet details{margin:8px 0}.sheet summary{font-weight:600;cursor:pointer;padding:6px 0}
+.sheet select,.sheet input[type=date]{font-size:16px;padding:8px;border-radius:8px;border:1px solid var(--sep);background:var(--bg,#fff);color:inherit;max-width:100%}

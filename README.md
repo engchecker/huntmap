@@ -24,6 +24,19 @@ A phone map for planning hunts and checking, on the spot, whether you can hunt w
 
 Tick a species under Map & layers → Animals and a heatmap shows where DOC and hunters rate public land best for it. There are 47 areas, rated 1–3 from DOC block descriptions, DOC monitoring, herd management plans and hunter forums. Tap a red dot for notes, access rules and sources, or use **Best public areas** for a ranked list. It reflects reputation, not live counts, and popular areas carry the most pressure. Edit `hotspots.js` to add your own spots.
 
+## Find animals (habitat model)
+
+Tools › **Find animals** (or **Find animals here** on a hotspot) scores the ground in view for one species and shades the likeliest areas yellow to red, with up to six numbered spots.
+
+- **Behaviour** (`behaviour.js`): feeding and bedding cover, preferred slope and landform, distance to edges and water, sensitivity to roads and tracks, sunny or shady faces by season, height in the valley, daily activity by season, and rut or roar dates. Text draws on DOC species hunting guides.
+- **Terrain**: LINZ elevation gives slope, aspect and landform (gully, face or spur).
+- **Cover and features**: LINZ Topo vector data gives native and exotic forest, scrub, scattered scrub, wetland, scree and rock, streams, slips, bluffs, tracks, roads and buildings.
+- **Sun and wind**: the sun's position for the chosen date and time, plus the Open-Meteo wind (or your own setting) for shelter, downwind approach and thermals.
+- **Your hunt log**: with three or more kills or sightings of that species in view, the model reweights itself towards the ground where you've actually found them.
+- By default only DOC land open to hunting is scored.
+
+Each spot lists why it scored well, how to approach it for wind and thermals, and buttons to navigate or save a waypoint. Offline, it needs the area saved with **Topo** and **Terrain** ticked. It's a guide to where to look, not a guarantee.
+
 ## Field tools (More menu)
 
 - **Shooting arc check:** set your firearm and aim (tap the map or use the phone's compass). It lists mapped houses, roads, DOC tracks, huts, legal roads, private land and the hunting-block edge inside your line of fire, nearest first. Mapped data only: it can't see people, stock or unmapped buildings, and ignores terrain.
