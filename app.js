@@ -495,8 +495,6 @@ async function identifyOnline(p) {
   const keys = ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'pestWill', 'pestHave'];
   // land queries first (critical), animals afterwards so they can't crowd the connection
   const proms = keys.map(k => q(LBY[k]));
-  proms.push(q(LBY.parcels, true, 2));
-  proms.push(retry(() => agsQuery(URLS.titles, { geometry: p.join(','), geometryType: 'esriGeometryPoint', inSR: 4326, spatialRel: 'esriSpatialRelIntersects', outFields: 'title_no,type,estate_description,number_owners,guarantee_status', returnGeometry: false }, { pages: 1, rec: 10, timeout: 25000 }), 2).then(fc => fc.features));
   const res = await Promise.allSettled(proms);
   if (res.every(r => r.status === 'rejected')) throw new Error('offline');
   const spProms = SPECIES.map(s => {
@@ -508,11 +506,17 @@ async function identifyOnline(p) {
   const props = i => g(i).map(f => f.properties);
   const out = { src: 'live', failed: [] };
   keys.forEach((k, i) => { out[k] = props(i); if (res[i].status === 'rejected') out.failed.push(k); });
-  out.parcel = g(keys.length); if (res[keys.length].status === 'rejected') out.failed.push('parcels');
-  out.title = props(keys.length + 1); if (res[keys.length + 1].status === 'rejected') out.failed.push('titles');
+  out.parcel = []; out.title = [];
+  out.publicChecked = ['hunt', 'pcl', 'road'].every(k => !out.failed.includes(k));
   out.species = spr.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
   out.speciesKnown = spr.some(r => r.status === 'fulfilled');
   return out;
+}
+async function parcelOnline(p) {
+  const q1 = retry(() => agsQuery(LBY.parcels.url, pointParams(p, LBY.parcels, true), { pages: 1, timeout: 30000, rec: 5 }), 3).then(fc => fc.features);
+  const q2 = retry(() => agsQuery(URLS.titles, { geometry: p.join(','), geometryType: 'esriGeometryPoint', inSR: 4326, spatialRel: 'esriSpatialRelIntersects', outFields: 'title_no,type,estate_description,number_owners,guarantee_status', returnGeometry: false }, { pages: 1, rec: 10, timeout: 30000 }), 2).then(fc => fc.features.map(f => f.properties));
+  const [a, b] = await Promise.allSettled([q1, q2]);
+  return { parcel: a.status === 'fulfilled' ? a.value : null, title: b.status === 'fulfilled' ? b.value : [] };
 }
 /* Fill anything the live lookup missed from data already loaded for the map (same sources). */
 function mergeLocal(r, local) {
@@ -570,6 +574,7 @@ function classify(r) {
     if (/reserve|crown|railway/i.test(i)) return { cat: 'restricted', title: 'Reserve, Crown or rail land', text: 'Find out who manages it. Usually needs specific permission.' };
     return { cat: 'private', title: 'Private land — permission required', text: 'You need the landowner’s permission to go on or hunt. No permission, no access.' };
   }
+  if (r.src === 'live' && r.publicChecked) return { cat: 'private', assumed: true, title: 'Private land — permission required', text: 'Not DOC land or public access, so treat it as private. You need the landowner’s permission. Tap “More info” for the lot, DP and title.' };
   if (r.src === 'offline' && !r.coverage) return { cat: 'unknown', title: 'No offline data here', text: 'Save this area for offline use when you have signal.' };
   return { cat: 'unknown', title: 'Land status not found', text: r.partial ? 'The property lookup didn’t respond. Tap Retry below, or zoom in to 13+ so boundaries load on the map, then tap again.' : map.getZoom() < 13 ? 'Zoom in to 13+ and tap again to load property boundaries.' : 'No parcel or DOC data recorded for this spot.' };
 }
@@ -579,6 +584,7 @@ async function identify(p) {
   setTarget(p);
   showSheet(`<h2>Checking this spot…</h2><p class="sub">${p[1].toFixed(5)}, ${p[0].toFixed(5)}</p>`, { kind: 'id' });
   let r = null; const local = identifyLocal(p);
+  if (local.coverage && (local.parcel.length || local.hunt.length || local.pcl.length || local.road.length)) renderIdentify(p, local);
   if (online()) { try { r = mergeLocal(await identifyOnline(p), local); } catch { r = null; } }
   if (!r) r = local;
   if (!state.target || state.target[0] !== p[0] || state.target[1] !== p[1]) return;
@@ -586,7 +592,9 @@ async function identify(p) {
   setData('sel', pf && pf.geometry ? pf : EMPTY);
   renderIdentify(p, r);
 }
+let lastId = null;
 function renderIdentify(p, r) {
+  lastId = { p, r };
   const v = classify(r);
   const [E, N] = llToNZTM(p[0], p[1]);
   let h = `<div class="verdict ${VCLS[v.cat]}"><div><b>${esc(v.title)}</b><span>${esc(v.text)}</span></div></div>`;
@@ -633,6 +641,9 @@ function renderIdentify(p, r) {
     if (titleRef && !ROADISH.test(pc.parcel_intent || '')) {
       h += `<p class="sub">Owner names aren’t open data. LINZ Land Record Search sells the title (about $8), and the title lists the registered owners. Use it to ask permission.</p><div class="btnrow"><button class="btn" data-act="lrs" data-title="${esc(titleRef)}">Copy title &amp; open LINZ</button></div>`;
     }
+    if (!r.title || !r.title.length) h += `<div class="btnrow"><button class="btn small ghost" data-act="parcelInfo">Title details (estate, owners)</button></div>`;
+  } else if (online()) {
+    h += `<h3>Property</h3><div id="parcelBox"><div class="btnrow"><button class="btn" data-act="parcelInfo">More info: lot, DP &amp; title</button></div><p class="sub">Looks up the land parcel separately. This can be slow in the hills.</p></div>`;
   }
 
   h += `<h3>Go there</h3><div class="btnrow">
@@ -644,6 +655,17 @@ function renderIdentify(p, r) {
     <p class="sub">Driving apps route you to the nearest road. Don’t drive or walk across private land unless you have permission.</p>`;
   showSheet(h, { kind: 'id' });
 }
+actions.parcelInfo = async () => {
+  if (!lastId) return; const { p, r } = lastId;
+  const box = $('#parcelBox'); if (box) box.innerHTML = '<p class="sub">Looking up the land parcel…</p>';
+  const res = await parcelOnline(p);
+  if (!lastId || lastId.p !== p) return;
+  if (res.parcel == null) { if (box) box.innerHTML = '<p class="sub">LINZ didn’t respond. The verdict above still stands.</p><div class="btnrow"><button class="btn small" data-act="parcelInfo">Try again</button></div>'; return; }
+  if (!res.parcel.length) { if (box) box.innerHTML = '<p class="sub">No land parcel is recorded at this exact spot (often water or unsurveyed land).</p>'; return; }
+  r.parcel = res.parcel; r.title = res.title; r.publicChecked = r.publicChecked;
+  const pf = r.parcel[0]; setData('sel', pf && pf.geometry ? pf : EMPTY);
+  renderIdentify(p, r);
+};
 actions.reId = b => identify([+b.dataset.lng, +b.dataset.lat]);
 actions.lrs = async b => { try { await navigator.clipboard.writeText(b.dataset.title); toast('Title ' + b.dataset.title + ' copied'); } catch {} window.open(LINKS.lrs, '_blank', 'noopener'); };
 actions.copy = async b => { try { await navigator.clipboard.writeText(b.dataset.text); toast('Copied'); } catch { toast(b.dataset.text); } };
@@ -1098,7 +1120,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.2.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.3 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
