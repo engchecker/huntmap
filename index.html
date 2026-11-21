@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#16261d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Hunt Access NZ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="map" aria-label="Map"></div>
+
+<header id="topbar">
+  <form id="searchForm" role="search" autocomplete="off">
+    <input id="searchInput" type="search" placeholder="Place, lat,lng or NZTM E N" aria-label="Search places">
+  </form>
+  <span id="netChip" class="chip" title="Connection status">Online</span>
+  <div id="searchResults" class="results" hidden></div>
+</header>
+
+<div id="statusBar" hidden>
+  <span class="dot"></span><span id="statusText">Locating…</span>
+</div>
+
+<nav id="fabs" aria-label="Map tools">
+  <button id="btnLocate" class="fab" title="My location" aria-label="My location">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8" fill="none"/></svg>
+  </button>
+  <button id="btnLayers" class="fab" title="Map & layers" aria-label="Map and layers">
+    <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5" fill="none"/></svg>
+  </button>
+  <button id="btnOffline" class="fab" title="Offline maps" aria-label="Offline maps">
+    <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5" fill="none"/><path d="M5 19h14" fill="none"/></svg>
+  </button>
+  <button id="btnMenu" class="fab" title="More" aria-label="More tools">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+  </button>
+</nav>
+
+<div id="crosshair" hidden></div>
+
+<section id="sheet" class="sheet" aria-live="polite" hidden>
+  <div class="grab" id="sheetGrab"></div>
+  <button class="close" id="sheetClose" aria-label="Close">×</button>
+  <div id="sheetBody"></div>
+</section>
+
+<div id="toast" role="status" hidden></div>
+<div id="dlg" class="dlg" hidden><div class="dlg-card"><p id="dlgText"></p><div class="row"><button id="dlgNo" class="btn ghost">Cancel</button><button id="dlgYes" class="btn">OK</button></div></div></div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
