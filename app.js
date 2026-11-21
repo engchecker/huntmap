@@ -176,9 +176,9 @@ const WP_TYPES = { vehicle: ['Vehicle', '#1d4ed8'], camp: ['Camp / hut', '#0d948
 /* ---------------- state ---------------- */
 const state = {
   base: LS.get('base', 'topo'),
-  vis: Object.assign({ pcl: true, hunt: true, paa: true, priv: true, parcels: true, pest: true, access: true, wps: true, huts: true, routes: true, log: true, hill: false, slope: false, sun: false, heat: true }, LS.get('vis', {})),
+  vis: Object.assign({ pcl: true, hunt: true, paa: true, priv: true, parcels: true, pest: true, access: true, wps: true, huts: true, routes: true, log: true, hill: false, slope: false, sun: false, heat: true }, LS.get('vis', {}), { slope: false, sun: false }),  // heavy layers start off every session
   strength: LS.get('strength', 1), fade: LS.get('fade', 0),
-  sp: LS.get('sp', {}),
+  sp: {},   // species layers start off every session; tick them when wanted
   alerts: LS.get('alerts', true),
   key: LS.get('linzKey', ''),
   me: null, follow: false, watchId: null, target: null,
@@ -792,9 +792,9 @@ function layersSheet() {
     ${tg('log', 'Hunt log (kills red, sightings amber)', '#be123c')}
     <h3>Terrain</h3>
     ${tg('hill', 'Hillshade', '#94a3b8', 'Shaded relief to read the ground')}
-    ${tg('slope', 'Slope steepness', '#f97316', 'Zoom 10+. Yellow 25°+, orange 30°+, red 35°+, purple 45°+')}
-    ${tg('sun', 'Sunny north faces', '#facc15', 'Zoom 10+. Yellow: north-facing (warm, often winter feed). Blue: shady south faces')}
-    <h3>Animals (DOC distribution)</h3>
+    ${tg('slope', 'Slope steepness', '#f97316', 'Zoom 10+. Yellow 25°+, orange 30°+, red 35°+, purple 45°+. Off each time the app opens')}
+    ${tg('sun', 'Sunny north faces', '#facc15', 'Zoom 10+. Yellow: north-facing (warm, often winter feed). Blue: shady south faces. Off each time the app opens')}
+    <h3>Animals (DOC distribution)</h3><p class="sub">Off each time the app opens. Tick only the species you’re after.</p>
     <div class="btnrow"><button class="btn small" data-act="spPreset">Deer, goats &amp; pigs</button><button class="btn small ghost" data-act="spNone">Clear</button><button class="btn small ghost" data-act="hotList">Best public areas</button></div>
     ${tg('heat', 'Hotspot heatmap for ticked species', '#f03b20', 'Where DOC and hunters rate public land best. Tap a red dot for details')}
     ${SPECIES.map(sp).join('')}
@@ -1155,7 +1155,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.5.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.5.2 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
