@@ -132,6 +132,8 @@ const PAA = 'https://services2.arcgis.com/b5ADKIcWivL5vNaV/ArcGIS/rest/services/
 const BM = 'https://basemaps.linz.govt.nz';
 const URLS = {
   titles: LINZ + 'LINZ_NZ_Property_Titles/FeatureServer/0',
+  addresses: LINZ + 'LINZ_NZ_Addresses/FeatureServer/0',
+  roads: LINZ + 'LINZ_NZ_Addresses_Roads/FeatureServer/0',
   places: LINZ + 'LINZ_NZ_Place_Names/FeatureServer/0'
 };
 const LINKS = {
@@ -152,7 +154,7 @@ const LAYERS = [
   { id: 'res', group: 'paa', minz: 11, url: PAA + '3', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
   { id: 'parks', group: 'paa', minz: 11, url: PAA + '5', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
   { id: 'other', group: 'paa', minz: 11, url: PAA + '6', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
-  { id: 'parcels', group: 'parcels', minz: 14, url: LINZ + 'LINZ_NZ_Primary_Parcels/FeatureServer/0', fields: 'appellation,parcel_intent,land_district,titles,calc_area', pages: 6 },
+  { id: 'parcels', group: 'parcels', minz: 13, url: LINZ + 'LINZ_NZ_Primary_Parcels/FeatureServer/0', fields: 'appellation,parcel_intent,land_district,titles,calc_area', pages: 8 },
   { id: 'pestWill', group: 'pest', minz: 7, url: DOC + 'Pesticides_WillBeLaid_HFV/FeatureServer/0', fields: 'BlockName,Pesticide,PesticideTradeName,MethodName,StartDate,FinishDate,LeadAgency,CautionPeriod' },
   { id: 'pestHave', group: 'pest', minz: 7, url: DOC + 'Pesticides_HaveBeenLaid_HFV/FeatureServer/0', fields: 'BlockName,Pesticide,PesticideTradeName,MethodName,StartDate,FinishDate,LeadAgency,CautionPeriod' },
   ...SPECIES.map(s => ({ id: 'sp_' + s.key, group: 'species', sp: s, minz: 5, url: DOC + s.svc + '/FeatureServer/0', fields: 'CommonName,PA', where: "PA='Presence'" }))
@@ -168,7 +170,8 @@ const WP_TYPES = { vehicle: ['Vehicle', '#1d4ed8'], camp: ['Camp / hut', '#0d948
 /* ---------------- state ---------------- */
 const state = {
   base: LS.get('base', 'topo'),
-  vis: Object.assign({ pcl: true, hunt: true, paa: true, parcels: true, pest: true, access: true, wps: true }, LS.get('vis', {})),
+  vis: Object.assign({ pcl: true, hunt: true, paa: true, priv: true, parcels: true, pest: true, access: true, wps: true }, LS.get('vis', {})),
+  strength: LS.get('strength', 1), fade: LS.get('fade', 0),
   sp: LS.get('sp', {}),
   alerts: LS.get('alerts', true),
   key: LS.get('linzKey', ''),
@@ -272,53 +275,125 @@ map.on('error', e => {
 });
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
+const PAL = {
+  doc: '#1b7f3b', docLine: '#0f5a28',
+  huntOk: '#a3e635', huntOkLine: '#4d7c0f', huntRes: '#f59e0b', huntResLine: '#b45309', huntNo: '#dc2626',
+  road: '#f97316', roadLine: '#c2410c', access: '#0ea5e9', accessLine: '#0369a1',
+  priv: '#e11d48', maori: '#a21caf', river: '#64748b', check: '#94a3b8'
+};
+const BASE_OP = {};
+const WORLD = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } };
+function stripes(colour) {
+  const c = document.createElement('canvas'); c.width = c.height = 16; const x = c.getContext('2d');
+  x.strokeStyle = colour; x.lineWidth = 2.5; x.beginPath();
+  for (let i = -16; i <= 32; i += 8) { x.moveTo(i, 16); x.lineTo(i + 16, 0); }
+  x.stroke(); return x.getImageData(0, 0, 16, 16);
+}
+const opOf = id => Math.min(0.92, BASE_OP[id] * state.strength);
+function applyPaint() {
+  for (const id in BASE_OP) if (map.getLayer(id)) map.setPaintProperty(id, 'fill-opacity', opOf(id));
+  if (map.getLayer('fade-f')) map.setPaintProperty('fade-f', 'fill-opacity', state.fade);
+}
 function addOverlays() {
   const src = id => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: (state.loaded[id] && state.loaded[id].fc) || EMPTY }); };
   LAYERS.forEach(L => src(L.id));
-  ['sel', 'acc', 'tline', 'wps'].forEach(src);
+  ['sel', 'acc', 'tline', 'wps', 'priv'].forEach(src);
+  if (!map.getSource('fade')) map.addSource('fade', { type: 'geojson', data: WORLD });
+  if (!map.hasImage('noHunt')) map.addImage('noHunt', stripes('#dc2626'));
   const add = l => { if (!map.getLayer(l.id)) map.addLayer(l); };
-  add({ id: 'pcl-f', type: 'fill', source: 'pcl', minzoom: 9, paint: { 'fill-color': '#2e7d32', 'fill-opacity': 0.1 } });
-  add({ id: 'pcl-l', type: 'line', source: 'pcl', minzoom: 9, paint: { 'line-color': '#1b5e20', 'line-width': 1.3, 'line-dasharray': [3, 1.5] } });
-  SPECIES.forEach(s => {
-    add({ id: 'sp_' + s.key + '-f', type: 'fill', source: 'sp_' + s.key, paint: { 'fill-color': s.colour, 'fill-opacity': 0.16 } });
-    add({ id: 'sp_' + s.key + '-l', type: 'line', source: 'sp_' + s.key, paint: { 'line-color': s.colour, 'line-width': 1.2 } });
+  const addF = (id, source, colour, op, extra = {}) => { BASE_OP[id] = op; add({ id, type: 'fill', source, ...extra, paint: { 'fill-color': colour, 'fill-opacity': opOf(id) } }); };
+  add({ id: 'fade-f', type: 'fill', source: 'fade', paint: { 'fill-color': '#ffffff', 'fill-opacity': state.fade } });
+  // 4. needs landowner permission (derived from parcels not covered by public land)
+  addF('priv-f', 'priv', ['match', ['get', 'cls'], 'maori', PAL.maori, 'river', PAL.river, 'check', PAL.check, PAL.priv], 0.28, { minzoom: 13 });
+  // 1. DOC land
+  addF('pcl-f', 'pcl', PAL.doc, 0.35, { minzoom: 9 });
+  add({ id: 'pcl-l', type: 'line', source: 'pcl', minzoom: 9, paint: { 'line-color': PAL.docLine, 'line-width': 1.4 } });
+  SPECIES.forEach(sp => {
+    addF('sp_' + sp.key + '-f', 'sp_' + sp.key, sp.colour, 0.16);
+    add({ id: 'sp_' + sp.key + '-l', type: 'line', source: 'sp_' + sp.key, paint: { 'line-color': sp.colour, 'line-width': 1.2 } });
   });
-  const hc = ['match', ['get', 'HuntStatus'], 'Permitted', '#1f9d55', 'Restricted', '#d99a00', 'Prohibited', '#d23a2b', '#7a7a7a'];
-  add({ id: 'hunt-f', type: 'fill', source: 'hunt', paint: { 'fill-color': hc, 'fill-opacity': 0.22 } });
-  add({ id: 'hunt-l', type: 'line', source: 'hunt', paint: { 'line-color': hc, 'line-width': 1.8 } });
-  add({ id: 'res-f', type: 'fill', source: 'res', paint: { 'fill-color': '#0d9488', 'fill-opacity': 0.22 } });
-  add({ id: 'parks-f', type: 'fill', source: 'parks', paint: { 'fill-color': '#0284c7', 'fill-opacity': 0.18 } });
-  add({ id: 'other-f', type: 'fill', source: 'other', paint: { 'fill-color': '#7c3aed', 'fill-opacity': 0.2 } });
-  add({ id: 'ease-f', type: 'fill', source: 'ease', paint: { 'fill-color': '#7c3aed', 'fill-opacity': 0.3 } });
-  add({ id: 'ease-l', type: 'line', source: 'ease', paint: { 'line-color': '#5b21b6', 'line-width': 2 } });
-  add({ id: 'road-f', type: 'fill', source: 'road', minzoom: 12, paint: { 'fill-color': '#f08c00', 'fill-opacity': 0.5 } });
-  add({ id: 'road-l', type: 'line', source: 'road', minzoom: 12, paint: { 'line-color': '#b45309', 'line-width': 1 } });
+  // 2. huntable with a permit
+  addF('hunt-f', 'hunt', ['match', ['get', 'HuntStatus'], 'Permitted', PAL.huntOk, 'Restricted', PAL.huntRes, 'Prohibited', PAL.huntNo, '#7a7a7a'], 0.45, { filter: ['!=', ['get', 'HuntStatus'], 'Prohibited'] });
+  add({ id: 'hunt-p', type: 'fill', source: 'hunt', filter: ['==', ['get', 'HuntStatus'], 'Prohibited'], paint: { 'fill-pattern': 'noHunt' } });
+  add({ id: 'hunt-l', type: 'line', source: 'hunt', paint: { 'line-color': ['match', ['get', 'HuntStatus'], 'Permitted', PAL.huntOkLine, 'Restricted', PAL.huntResLine, 'Prohibited', PAL.huntNo, '#555'], 'line-width': 2 } });
+  // 3. public access to travel through
+  addF('res-f', 'res', PAL.access, 0.3);
+  addF('parks-f', 'parks', PAL.access, 0.25);
+  addF('other-f', 'other', PAL.access, 0.3);
+  addF('ease-f', 'ease', PAL.access, 0.45);
+  add({ id: 'ease-l', type: 'line', source: 'ease', paint: { 'line-color': PAL.accessLine, 'line-width': 2 } });
+  addF('road-f', 'road', PAL.road, 0.6, { minzoom: 12 });
+  add({ id: 'road-l', type: 'line', source: 'road', minzoom: 12, paint: { 'line-color': PAL.roadLine, 'line-width': 1 } });
   ['pestWill', 'pestHave'].forEach((id, i) => {
-    add({ id: id + '-f', type: 'fill', source: id, paint: { 'fill-color': '#d23a2b', 'fill-opacity': i ? 0.08 : 0.14 } });
+    addF(id + '-f', id, '#d23a2b', i ? 0.08 : 0.14);
     add({ id: id + '-l', type: 'line', source: id, paint: { 'line-color': '#b91c1c', 'line-width': 2, 'line-dasharray': [2, 2] } });
   });
   add({ id: 'parcels-c', type: 'line', source: 'parcels', minzoom: 14, paint: { 'line-color': '#000', 'line-width': 2.2, 'line-opacity': 0.35 } });
   add({ id: 'parcels-l', type: 'line', source: 'parcels', minzoom: 14, paint: { 'line-color': '#ffffff', 'line-width': 0.9 } });
-  add({ id: 'sel-l', type: 'line', source: 'sel', paint: { 'line-color': '#ff6a13', 'line-width': 3.5 } });
+  add({ id: 'sel-l', type: 'line', source: 'sel', paint: { 'line-color': '#ff6a13', 'line-width': 4 } });
   add({ id: 'tline-l', type: 'line', source: 'tline', paint: { 'line-color': '#ff6a13', 'line-width': 2.5, 'line-dasharray': [2, 2] } });
   add({ id: 'acc-f', type: 'fill', source: 'acc', paint: { 'fill-color': '#1a73e8', 'fill-opacity': 0.12 } });
   add({ id: 'acc-l', type: 'line', source: 'acc', paint: { 'line-color': '#1a73e8', 'line-width': 1 } });
   add({ id: 'wps-c', type: 'circle', source: 'wps', paint: { 'circle-radius': 7, 'circle-color': ['get', 'colour'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
-  applyVisibility(); renderWps(); updateAcc(); updateTargetLine();
+  applyVisibility(); renderWps(); updateAcc(); updateTargetLine(); computePriv();
 }
 map.on('style.load', addOverlays);
 
 function layerVisible(L) { return L.group === 'species' ? !!state.sp[L.sp.key] : !!state.vis[L.group]; }
+const PRIV_NEEDS = ['pcl', 'hunt', 'paa', 'parcels'];
+function layerNeeded(L) { return layerVisible(L) || (state.vis.priv && PRIV_NEEDS.includes(L.group)); }
 function applyVisibility() {
   if (!map.isStyleLoaded()) return;
   for (const L of LAYERS) {
     const v = layerVisible(L) ? 'visible' : 'none';
-    for (const suf of ['-f', '-l', '-c']) if (map.getLayer(L.id + suf)) map.setLayoutProperty(L.id + suf, 'visibility', v);
+    for (const suf of ['-f', '-l', '-c', '-p']) if (map.getLayer(L.id + suf)) map.setLayoutProperty(L.id + suf, 'visibility', v);
   }
   if (map.getLayer('wps-c')) map.setLayoutProperty('wps-c', 'visibility', state.vis.wps ? 'visible' : 'none');
+  if (map.getLayer('priv-f')) map.setLayoutProperty('priv-f', 'visibility', state.vis.priv ? 'visible' : 'none');
   accessMarkers.forEach(m => { m.getElement().style.display = state.vis.access ? '' : 'none'; });
 }
-function setData(id, fc) { const s = map.getSource(id); if (s) s.setData(fc); }
+function setData(id, fc) { const s = map.getSource(id); if (s) s.setData(fc); if (PUBLIC_IDS.includes(id) || id === 'parcels') schedulePriv(); }
+
+/* "needs landowner permission": parcels whose interior isn't DOC land or public access */
+const PUBLIC_IDS = ['pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other'];
+let privTimer = null;
+function schedulePriv() { clearTimeout(privTimer); privTimer = setTimeout(computePriv, 200); }
+function fbbox(f) {
+  if (f._bb) return f._bb; const a = [180, 90, -180, -90];
+  const walk = c => { if (typeof c[0] === 'number') { if (c[0] < a[0]) a[0] = c[0]; if (c[1] < a[1]) a[1] = c[1]; if (c[0] > a[2]) a[2] = c[0]; if (c[1] > a[3]) a[3] = c[1]; } else c.forEach(walk); };
+  if (f.geometry) walk(f.geometry.coordinates); f._bb = a; return a;
+}
+function innerPoint(f) {
+  const g = f.geometry, ring = g.type === 'Polygon' ? g.coordinates[0] : g.coordinates[0][0], b = fbbox(f);
+  let p = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]; if (featContains(f, p)) return p;
+  let sx = 0, sy = 0; for (const v of ring) { sx += v[0]; sy += v[1]; }
+  p = [sx / ring.length, sy / ring.length]; if (featContains(f, p)) return p;
+  for (let i = 2; i < ring.length; i++) { const q = [(ring[0][0] + ring[i][0]) / 2, (ring[0][1] + ring[i][1]) / 2]; if (featContains(f, q)) return q; }
+  return ring[0];
+}
+function parcelCls(i) {
+  if (ROADISH.test(i)) return null;
+  if (/hydro|riverbed|streambed/i.test(i)) return 'river';
+  if (/maori|customary/i.test(i)) return 'maori';
+  if (/reserve|crown|railway|marine|accretion|reclamation|erosion/i.test(i)) return 'check';
+  return 'private';
+}
+function computePriv() {
+  if (!map.getSource('priv')) return;
+  const pf = state.loaded.parcels && state.loaded.parcels.fc;
+  if (!pf || !state.vis.priv) { map.getSource('priv').setData(EMPTY); return; }
+  const pub = [];
+  for (const id of PUBLIC_IDS) { const st = state.loaded[id]; if (st && st.fc) for (const f of st.fc.features) if (f.geometry && /Polygon/.test(f.geometry.type)) pub.push(f); }
+  const out = [];
+  for (const f of pf.features) {
+    if (!f.geometry || !/Polygon/.test(f.geometry.type)) continue;
+    const cls = parcelCls((f.properties && f.properties.parcel_intent) || ''); if (!cls) continue;
+    const p = innerPoint(f); let isPub = false;
+    for (const q of pub) { const b = fbbox(q); if (p[0] < b[0] || p[0] > b[2] || p[1] < b[1] || p[1] > b[3]) continue; if (featContains(q, p)) { isPub = true; break; } }
+    if (!isPub) out.push({ type: 'Feature', geometry: f.geometry, properties: { cls } });
+  }
+  map.getSource('priv').setData({ type: 'FeatureCollection', features: out });
+}
 
 /* ---------------- loading data for the view ---------------- */
 function viewBBox(pad = 0) {
@@ -338,7 +413,7 @@ async function refreshData() {
   const z = map.getZoom(), vb = viewBBox(0), fb = viewBBox(0.35), lat = map.getCenter().lat, gen = ++state.gen;
   const jobs = [];
   for (const L of LAYERS) {
-    if (!layerVisible(L) || z < L.minz) continue;
+    if (!layerNeeded(L) || z < L.minz) continue;
     const st = state.loaded[L.id], zb = zBucket(z);
     if (st && bboxContains(st.bbox, vb) && st.zb >= Math.min(zb, L.group === 'species' ? 9 : 15)) continue;
     if (!online()) { const fc = offlineFC(L.id, vb); state.loaded[L.id] = { bbox: vb, zb: 99, fc, off: true }; setData(L.id, fc); continue; }
@@ -588,24 +663,36 @@ $('#statusBar').onclick = () => { if (state.me) identify([state.me.lng, state.me
 /* ---------------- layers sheet ---------------- */
 function layersSheet() {
   const seg = Object.entries(BASEMAPS).map(([k, b]) => `<button data-act="base" data-k="${k}" class="${state.base === k ? 'on' : ''}">${b.label}<br><span class="sub">${b.note}</span></button>`).join('');
-  const tg = (k, label, sw) => `<label class="toggle"><input type="checkbox" data-act="vis" data-k="${k}" ${state.vis[k] ? 'checked' : ''}>${sw ? `<span class="swatch" style="background:${sw}"></span>` : ''}${label}</label>`;
+  const tg = (k, label, sw, note) => `<label class="toggle"><input type="checkbox" data-act="vis" data-k="${k}" ${state.vis[k] ? 'checked' : ''}>${sw ? `<span class="swatch" style="background:${sw}"></span>` : ''}<span>${label}${note ? `<br><span class="sub">${note}</span>` : ''}</span></label>`;
+  const sw = c => `<i class="swatch" style="background:${c}"></i>`;
   const sp = s => `<label class="toggle"><input type="checkbox" data-act="sp" data-k="${s.key}" ${state.sp[s.key] ? 'checked' : ''}><span class="swatch" style="background:${s.colour}"></span>${s.label}</label>`;
   showSheet(`<h2>Map &amp; layers</h2><div class="seg">${seg}</div>
-    <h3>Land &amp; access</h3>
-    ${tg('hunt', 'DOC hunting areas', '#1f9d55')}
-    <div class="legend"><span><i class="swatch" style="background:#1f9d55"></i>Permitted</span><span><i class="swatch" style="background:#d99a00"></i>Restricted / ballot</span><span><i class="swatch" style="background:#d23a2b"></i>No hunting</span></div>
-    ${tg('pcl', 'Conservation land (all DOC land)', '#2e7d32')}
-    ${tg('paa', 'Public access &amp; paper roads (zoom 12+)', '#f08c00')}
-    <div class="legend"><span><i class="swatch" style="background:#f08c00"></i>Legal road (formed or paper)</span><span><i class="swatch" style="background:#7c3aed"></i>Easement / other</span><span><i class="swatch" style="background:#0d9488"></i>Reserve</span></div>
-    ${tg('parcels', 'Property boundaries (zoom 14+)', '#ffffff')}
+    <h3>Land categories</h3>
+    ${tg('pcl', 'DOC land', PAL.doc, 'All public conservation land (zoom 9+)')}
+    ${tg('hunt', 'Huntable with a permit only', PAL.huntOk, 'DOC hunting areas. No landowner permission needed, just the DOC permit')}
+    <div class="legend"><span>${sw(PAL.huntOk)}Permitted</span><span>${sw(PAL.huntRes)}Restricted / ballot</span><span><i class="swatch" style="background:repeating-linear-gradient(45deg,#dc2626 0 2px,#fff 2px 6px)"></i>No hunting</span></div>
+    ${tg('paa', 'Public access to travel through', PAL.access, 'You can walk through, but you can’t hunt on it without the manager’s say-so (zoom 11+)')}
+    <div class="legend"><span>${sw(PAL.road)}Legal &amp; paper roads</span><span>${sw(PAL.access)}Easements, strips, reserves</span></div>
+    ${tg('priv', 'Needs landowner permission', PAL.priv, 'All other land (zoom 13+)')}
+    <div class="legend"><span>${sw(PAL.priv)}Private</span><span>${sw(PAL.maori)}Māori land</span><span>${sw(PAL.river)}Riverbed</span><span>${sw(PAL.check)}Other Crown / reserve: check</span></div>
+    ${tg('parcels', 'Property boundary lines', '#ffffff', 'Zoom 14+')}
+    <h3>Colours</h3>
+    <span class="field-l">Overlay strength</span><input type="range" min="0.4" max="2" step="0.1" data-act="strength" value="${state.strength}" aria-label="Overlay strength">
+    <span class="field-l">Fade basemap (makes colours stand out)</span><input type="range" min="0" max="0.7" step="0.05" data-act="fade" value="${state.fade}" aria-label="Fade basemap">
+    <h3>Other layers</h3>
     ${tg('pest', 'Pesticide operations (1080 etc.)', '#d23a2b')}
     ${tg('access', 'Hunting access directory pins', '#5b47a6')}
     ${tg('wps', 'My waypoints', '#1d4ed8')}
     <h3>Animals (DOC distribution)</h3>
     <div class="btnrow"><button class="btn small" data-act="spPreset">Deer, goats &amp; pigs</button><button class="btn small ghost" data-act="spNone">Clear</button></div>
     ${SPECIES.map(sp).join('')}
-    <p class="sub">Tip: a paper road is an orange road strip with no road drawn on the basemap. Check it on Aerial.</p>`, { tall: true, kind: 'layers' });
+    <p class="sub">Tip: an orange road strip with no road drawn on the basemap is probably a paper road. Check it on Aerial.</p>`, { tall: true, kind: 'layers' });
 }
+sheetBody.addEventListener('input', e => {
+  const i = e.target; if (!i.dataset) return;
+  if (i.dataset.act === 'strength') { state.strength = +i.value; LS.set('strength', state.strength); applyPaint(); }
+  if (i.dataset.act === 'fade') { state.fade = +i.value; LS.set('fade', state.fade); applyPaint(); }
+});
 actions.base = b => {
   state.base = b.dataset.k; LS.set('base', state.base);
   map.setStyle(styleFor(state.base), { diff: false });
@@ -613,7 +700,7 @@ actions.base = b => {
 };
 sheetBody.addEventListener('change', e => {
   const i = e.target; if (!i.dataset || !i.dataset.act) return;
-  if (i.dataset.act === 'vis') { state.vis[i.dataset.k] = i.checked; LS.set('vis', state.vis); applyVisibility(); scheduleRefresh(); }
+  if (i.dataset.act === 'vis') { state.vis[i.dataset.k] = i.checked; LS.set('vis', state.vis); applyVisibility(); scheduleRefresh(); schedulePriv(); }
   if (i.dataset.act === 'sp') { state.sp[i.dataset.k] = i.checked; LS.set('sp', state.sp); applyVisibility(); scheduleRefresh(); }
   if (i.dataset.act === 'alerts') { state.alerts = i.checked; LS.set('alerts', state.alerts); }
 });
@@ -930,12 +1017,12 @@ function settingsSheet() {
     <div class="btnrow"><button class="btn small" data-act="keySave">Save key</button><button class="btn small ghost" data-act="keyNew">New standard key</button></div>
     <h3>Device</h3><div class="btnrow"><button class="btn small ghost" data-act="clearRt">Clear browsing cache</button></div>
     <h3>How to read the map</h3>
-    <p class="sub">Tap anywhere to get a land status verdict. Green: DOC hunting permitted with a free permit. Amber: restricted or ballot. Red: no hunting, or private land. Orange: legal road, which may be a paper road. Purple: other public access. Public access never means permission to shoot.</p>
+    <p class="sub">Tap anywhere for a land status verdict. Dark green: DOC land. Lime: huntable with a DOC permit (amber: restricted or ballot; red stripes: no hunting). Orange: legal and paper roads. Blue: other public access to travel through. Rose: needs landowner permission (purple: Māori land; slate: riverbed; grey: other Crown or reserve land to check). Turn each category on or off under Map &amp; layers. Public access never means permission to shoot.</p>
     <h3>Data sources</h3>
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.0 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -957,17 +1044,54 @@ $('#searchForm').addEventListener('submit', async e => {
   }
   const wpHits = state.wps.filter(w => w.name.toLowerCase().includes(q.toLowerCase())).map(w => ({ name: w.name, sub: 'Waypoint', p: [w.lng, w.lat] }));
   let hits = [...wpHits];
+  results.innerHTML = '<button disabled>Searching…</button>'; results.hidden = false;
   if (online()) {
-    try {
-      const qq = q.replace(/'/g, "''");
-      const fc = await agsQuery(URLS.places, { where: `UPPER(name) LIKE UPPER('%${qq}%')`, outFields: 'name,feat_type,territorial_authority', returnGeometry: true }, { pages: 1, rec: 15 });
-      hits = hits.concat(fc.features.filter(f => f.geometry).map(f => ({ name: f.properties.name, sub: [f.properties.feat_type, f.properties.territorial_authority].filter(Boolean).join(' · '), p: f.geometry.coordinates })));
-    } catch {}
+    const F = foldQ(q), num = /^\d/.test(F);
+    const roadPart = F.replace(/^\d+[A-Z]?\s*(\/\s*\d+\s*)?/, '').trim();
+    const jobs = [
+      agsQuery(URLS.places, { where: `UPPER(name) LIKE '%${foldQ(q, false)}%'`, outFields: 'name,feat_type,territorial_authority', returnGeometry: true }, { pages: 1, rec: 8 })
+        .then(fc => fc.features.filter(f => f.geometry).map(f => ({ name: f.properties.name, sub: ['Place', f.properties.feat_type, f.properties.territorial_authority].filter(Boolean).join(' · '), p: f.geometry.coordinates, z: 14 })))
+    ];
+    if (num) jobs.push(agsQuery(URLS.addresses, { where: `UPPER(full_address_ascii) LIKE '${F}%'`, outFields: 'full_address,suburb_locality,town_city,territorial_authority', returnGeometry: true }, { pages: 1, rec: 10 })
+      .then(fc => fc.features.filter(f => f.geometry).map(f => ({ name: f.properties.full_address, sub: ['Address', f.properties.suburb_locality, f.properties.town_city || f.properties.territorial_authority].filter(Boolean).join(' · '), p: f.geometry.coordinates, z: 16, id: true }))));
+    if (roadPart.length >= 3) {
+      jobs.push(agsQuery(URLS.addresses, { where: `UPPER(full_road_name_ascii) LIKE '${roadPart}%'`, outFields: 'road_id,full_road_name,suburb_locality,town_city,territorial_authority', returnDistinctValues: true, returnGeometry: false }, { pages: 1, rec: 30 })
+        .then(fc => fc.features.map(f => ({ name: f.properties.full_road_name, sub: ['Road', f.properties.suburb_locality, f.properties.town_city || f.properties.territorial_authority].filter(Boolean).join(' · '), roadId: f.properties.road_id }))));
+      jobs.push(agsQuery(URLS.roads, { where: `UPPER(full_road_name_ascii) LIKE '${roadPart}%'`, outFields: 'road_id,full_road_name', returnGeometry: false }, { pages: 1, rec: 30 })
+        .then(fc => fc.features.map(f => ({ name: f.properties.full_road_name, sub: 'Road (no street addresses)', roadId: f.properties.road_id, bare: true }))));
+    }
+    const got = await Promise.allSettled(jobs);
+    const seenRoad = new Set();
+    for (const g of got) if (g.status === 'fulfilled') for (const h of g.value) {
+      if (h.roadId != null) { if (seenRoad.has(h.roadId)) continue; seenRoad.add(h.roadId); }
+      hits.push(h);
+    }
   }
-  results.innerHTML = hits.slice(0, 15).map((h, i) => `<button data-i="${i}">${esc(h.name)}<br><small>${esc(h.sub)}</small></button>`).join('') || `<button disabled>No matches${online() ? '' : ' (offline: try coordinates)'}</button>`;
+  results.innerHTML = hits.slice(0, 20).map((h, i) => `<button data-i="${i}">${esc(h.name)}<br><small>${esc(h.sub)}</small></button>`).join('') || `<button disabled>No matches${online() ? '' : ' (offline: try coordinates)'}</button>`;
   results.hidden = false; results._hits = hits;
 });
-results.addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (!b) return; const h = results._hits[+b.dataset.i]; results.hidden = true; map.flyTo({ center: h.p, zoom: 14 }); });
+function foldQ(q, expand = true) {
+  let s = q.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/'/g, "''").replace(/[%_]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (expand) s = s.replace(/\bRD\b\.?/g, 'ROAD').replace(/\bST\b\.?/g, 'STREET').replace(/\bAVE?\b\.?/g, 'AVENUE').replace(/\bHWY\b/g, 'HIGHWAY').replace(/\bDR\b\.?/g, 'DRIVE').replace(/\bTCE\b/g, 'TERRACE').replace(/\bPL\b/g, 'PLACE').replace(/\bCRES\b/g, 'CRESCENT');
+  return s;
+}
+results.addEventListener('click', async e => {
+  const b = e.target.closest('button[data-i]'); if (!b) return;
+  const h = results._hits[+b.dataset.i]; results.hidden = true;
+  if (h.roadId != null) {
+    try {
+      const fc = await agsQuery(URLS.roads, { where: `road_id=${+h.roadId}`, outFields: 'full_road_name', returnGeometry: true }, { pages: 2, rec: 200 });
+      if (!fc.features.length) { toast('Couldn’t find that road’s location'); return; }
+      const bb = [180, 90, -180, -90];
+      fc.features.forEach(f => { const r = fbbox(f); bb[0] = Math.min(bb[0], r[0]); bb[1] = Math.min(bb[1], r[1]); bb[2] = Math.max(bb[2], r[2]); bb[3] = Math.max(bb[3], r[3]); });
+      setData('sel', fc); map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: 60, maxZoom: 16 });
+      toast(h.name + ' highlighted. Tap beside it to check the land');
+    } catch { toast('Road lookup failed'); }
+    return;
+  }
+  map.flyTo({ center: h.p, zoom: h.z || 14 });
+  if (h.id) identify(h.p);
+});
 $('#searchInput').addEventListener('input', () => { if (!$('#searchInput').value) results.hidden = true; });
 map.on('movestart', () => { results.hidden = true; });
 
@@ -985,7 +1109,7 @@ netChip();
   renderWps(); addAccessPins(); scheduleRefresh();
   if (!LS.get('welcomed', false)) {
     showSheet(`<h2>Hunt Access NZ</h2><p>Tap anywhere on the map to see who owns or manages the land and whether you can hunt there.</p>
-      <ul class="sub"><li>Green: DOC land where hunting is permitted (you still need a free DOC permit)</li><li>Amber: restricted or ballot. Red: no hunting</li><li>Orange: legal roads, including paper roads</li><li>White lines (zoom 14+): property boundaries. Tap for title details</li></ul>
+      <ul class="sub"><li><b>Dark green</b>: DOC land</li><li><b>Lime</b>: huntable with just a DOC permit (amber: restricted or ballot; red stripes: no hunting)</li><li><b>Orange</b>: legal and paper roads. <b>Blue</b>: other public access to travel through</li><li><b>Rose</b>: everything else, which needs landowner permission (zoom 13+)</li></ul>
       <p class="sub">Before a trip, use <b>Offline maps</b> to save the area so status checks work with no signal. Turn on the location button for live status and boundary alerts.</p>
       <p class="sub">A planning aid only. Boundaries are indicative. You’re responsible for permission and permits.</p>
       <div class="btnrow"><button class="btn" data-act="welcomeOk">Got it</button></div>`, { kind: 'welcome' });

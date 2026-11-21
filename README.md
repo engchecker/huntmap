@@ -4,6 +4,9 @@ A phone map for planning hunts and checking, on the spot, whether you can hunt w
 
 ## What it does
 
+- **Colour-coded land categories, each a layer you can turn on and off:** dark green is DOC land; lime is huntable with just a DOC permit (amber: restricted or ballot; red stripes: no hunting); orange is legal and paper roads; blue is other public access to travel through; rose is everything else, which needs landowner permission (purple: Māori land; slate: riverbed; grey: Crown or reserve land to check). Sliders set overlay strength and fade the basemap.
+- **Search** by street address, road name, place name, lat/long or NZTM. Picking a road highlights its full length.
+
 - **Tap anywhere for a verdict.** For example: DOC land with hunting permitted, a restricted or ballot block, no hunting, a legal or paper road, other public access, private land, Māori land, or a riverbed parcel.
 - **DOC hunting blocks** show the block name, permit area and status, plus date, access, dog and special conditions. There's a link to the block page and to DOC's free open permit.
 - **Property boundaries** (zoom 14+) show the parcel appellation, its purpose, title reference, estate type and number of owners. Owner names aren't open data. "Copy title & open LINZ" takes you to Land Record Search, where the title costs about $8 and lists the registered owners.
