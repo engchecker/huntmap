@@ -128,3 +128,6 @@ select,input[type=date],input[type=datetime-local]{-webkit-appearance:none;appea
 select{padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238a968e' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
 input[type=date]::-webkit-date-and-time-value,input[type=datetime-local]::-webkit-date-and-time-value{text-align:left;color:var(--cardInk)}
 select option{background:var(--card);color:var(--cardInk)}
+.spgrid{display:grid;grid-template-columns:1fr 1fr;column-gap:12px;margin:4px 0 10px}
+.spgrid .toggle{padding:8px 0}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}

@@ -26,7 +26,7 @@ Tick a species under Map & layers → Animals and a heatmap shows where DOC and 
 
 ## Find animals (habitat model)
 
-Tools › **Find animals** (or **Find animals here** on a hotspot) scores the ground in view for one species and shades the likeliest areas yellow to red, with up to six numbered spots.
+Tools › **Find animals** (or **Find animals here** on a hotspot) scores the ground in view for one or more ticked species and shades the likeliest areas yellow to red, with up to six numbered spots.
 
 - **Behaviour** (`behaviour.js`): feeding and bedding cover, preferred slope and landform, distance to edges and water, sensitivity to roads and tracks, sunny or shady faces by season, height in the valley, daily activity by season, and rut or roar dates. Text draws on DOC species hunting guides.
 - **Terrain**: LINZ elevation gives slope, aspect and landform (gully, face or spur).
