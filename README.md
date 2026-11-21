@@ -93,3 +93,19 @@ DOC Open Data · Toitū Te Whenua LINZ (Basemaps, primary parcels, titles withou
 ## Editing the access directory
 
 `data.js` holds the directory as a plain list. To add a station you've got permission for, copy an entry and change the name, pins (`[latitude, longitude]`), species and notes.
+
+## How the code is organised
+
+No build step: plain files served as they are.
+
+| File | What it does |
+| --- | --- |
+| `index.html`, `app.css` | Page and styles |
+| `app.js` | The app: map, land data loading, identify, layers, GPS, offline areas, field tools. Sections are listed at the top of the file |
+| `model.js` | Find animals habitat model (uses `window.HuntMap`, the app's small internal API) |
+| `behaviour.js` | Species behaviour profiles used by the model |
+| `hotspots.js`, `data.js` | Public-land hotspots, access directory and species list |
+| `sw.js` | Service worker: app files network-first with offline fallback; map tiles cache-first |
+| `vendor/` | MapLibre GL 4.7.1 and a small vector-tile decoder |
+
+Saved offline areas keep a short summary list in memory. Each area's land data and tile list are stored separately in IndexedDB and only loaded for areas near where you're looking. Slope and sunny-face shading is worked out in a background worker so the map stays smooth.

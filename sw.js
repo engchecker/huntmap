@@ -1,5 +1,5 @@
 /* Hunt Access NZ service worker: app shell + map tile caching for offline use. */
-const SHELL = 'shell-v13';
+const SHELL = 'shell-v14';
 const TILES = 'tiles-v1';      // tiles saved deliberately via "Offline maps"
 const RT = 'tiles-rt';         // tiles seen while browsing (trimmed)
 const RT_MAX = 4000;
@@ -31,7 +31,7 @@ self.addEventListener('fetch', e => {
   if (url.hostname === 'basemaps.linz.govt.nz') {
     e.respondWith((async () => {
       const key = normKey(req.url);
-      const hit = (await caches.match(key, { cacheName: TILES })) || (await caches.match(key, { cacheName: RT }));
+      const hit = await caches.match(key);   // one lookup across saved-area and browsing caches
       if (hit) return hit;
       try {
         const res = await fetch(req);

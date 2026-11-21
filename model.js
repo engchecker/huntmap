@@ -5,7 +5,7 @@
    was saved with Topo + Terrain. A guide to where to look, not a guarantee. */
 (() => {
 'use strict';
-const A = window.__hamAPI, B = window.BEHAVIOUR || {}, VT = window.VT;
+const A = window.HuntMap, B = window.BEHAVIOUR || {}, VT = window.VT;
 if (!A || !VT) return;
 const { map, state, actions, LS, showSheet, closeSheet, toast, demTile, sunTimes, BM, distM, bearing, compass, fmtDist, fmtTime, esc, fetchT, online, setNav, mkCanvas } = A;
 const rad = Math.PI / 180, Z = 13, TS = 256, WORLD = TS * 2 ** Z, MAXC = 360, MAXPX = 2048;
@@ -163,11 +163,10 @@ async function loadVector(G, prog) {
   const N = G.W * G.H, veg = new Uint8Array(N), rd = C.veg.g.getImageData(0, 0, G.W, G.H).data;
   for (let i = 0; i < N; i++) veg[i] = clamp(Math.round((rd[i * 4] - 10) / 25), 0, 9);
   const mask = k2 => { const d = C[k2].g.getImageData(0, 0, G.W, G.H).data, m = new Uint8Array(N); for (let i = 0; i < N; i++) m[i] = d[i * 4 + 3] > 60 ? 1 : 0; return m; };
-  const counts = {}; VEG.forEach((v, i) => { counts[v] = 0; }); for (let i = 0; i < N; i++) counts[VEG[veg[i]]]++;
-  return { veg, water: mask('water'), road: mask('road'), track: mask('track'), slip: mask('slip'), cliff: mask('cliff'), counts, nWater: lines.water.length + groups.water.length };
+  return { veg, water: mask('water'), road: mask('road'), track: mask('track'), slip: mask('slip'), cliff: mask('cliff') };
 }
 function rasterFC(G, fcs, keep) {
-  const { c, g } = (() => { const c = mkCanvas(G.W, G.H); return { c, g: c.getContext('2d', { willReadFrequently: true }) }; })();
+  const g = mkCanvas(G.W, G.H).getContext('2d', { willReadFrequently: true });
   g.fillStyle = '#fff'; let n = 0;
   const proj = ring => ring.map(p => [(lng2w(p[0]) - G.x0) / G.s, (lat2w(p[1]) - G.y0) / G.s]);
   for (const fc of fcs) for (const f of fc.features || []) {
@@ -199,6 +198,7 @@ async function run(opt, prog) {
   const sps = (opt.sps || []).filter(k => B[k]); if (!sps.length) throw new Error('species');
   const G = gridFor(), N = G.W * G.H, c = G.centre;
   const t = timeFor(opt.when, opt.date, c[1], c[0]), season = seasonOf(t), period = periodOf(t, c[1], c[0]);
+  await A.loadAreas(G.bbox);
   prog(0.02, 'Checking the wind…');
   const wind = await windFor(c, t, opt.wind);
   const E = await loadDem(G, prog);
@@ -232,7 +232,6 @@ async function run(opt, prog) {
     const k = j * G.W + i, a = V.veg[k];
     for (const n of [i > 0 ? k - 1 : -1, i < G.W - 1 ? k + 1 : -1, j > 0 ? k - G.W : -1, j < G.H - 1 ? k + G.W : -1]) if (n >= 0 && ((cover(a) && openish(V.veg[n])) || (openish(a) && cover(V.veg[n])))) { edgeM[k] = 1; break; }
   }
-  const dist = new Uint8Array(N); for (let i = 0; i < N; i++) dist[i] = V.road[i] || V.track[i];
   const D = { water: chamfer(V.water, G.W, G.H, cm), edge: chamfer(edgeM, G.W, G.H, cm), road: chamfer(V.road, G.W, G.H, cm), track: chamfer(V.track, G.W, G.H, cm), slip: chamfer(V.slip, G.W, G.H, cm), cliff: chamfer(V.cliff, G.W, G.H, cm) };
   const hasEdge = edgeM.some(Boolean), hasWater = V.water.some(Boolean);
   // masks: DOC hunting areas and DOC distribution data
@@ -295,7 +294,7 @@ async function run(opt, prog) {
     const top = Math.max(1e-6, pct(Array.from(r.score).filter(v => v > 0), 0.985));
     for (let k = 0; k < N; k++) { const v = r.score[k] / top; if (v > score[k]) { score[k] = v; owner[k] = n; } }
   });
-  return { G, opt, t, season, period, wind, per, score, owner, slope, aspect, E, veg: V.veg, D, useMask, huntCovered, huntOn: hm.on / N, counts: V.counts, warm };
+  return { G, opt, t, season, period, wind, per, score, owner, slope, aspect, E, veg: V.veg, D, useMask, huntCovered };
 }
 
 /* ---------- output ---------- */
@@ -464,5 +463,5 @@ actions.findFromHot = b => {
   let shown = false; const open = () => { if (!shown) { shown = true; findSheet(sp ? { sps: [sp[0]] } : {}); } };
   map.once('idle', open); setTimeout(open, 2500);
 };
-window.__hamModel = { run, sunPos, periodOf, seasonOf, get result() { return R; } };
+A.model = { run, get result() { return R; } };
 })();

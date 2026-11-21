@@ -1,6 +1,13 @@
 /* Hunt Access NZ — offline-capable land access map for hunters.
    Data: DOC Open Data, LINZ (Basemaps, cadastre), Herenga ā Nuku Public Access Areas, Open-Meteo.
    Guidance only — not a legal boundary survey. */
+/* Contents (one file, sections in this order):
+   utilities · configuration · state · IndexedDB + saved offline areas · ArcGIS queries · map + overlays ·
+   private-land layer · loading data for the view · sheet · identify · GPS + live status · layers sheet ·
+   access directory · waypoints · permissions · trip intentions · wind & sun · offline areas · menu & settings ·
+   search · connectivity · hotspot heatmap · field tools (shooting arc, tracking & navigation, boundary distance,
+   check-in, terrain shading, route planner, scent cone, feature popups, hunt log, trip sharing) · start-up.
+   Other files: behaviour.js (species profiles), model.js (Find animals), hotspots.js, data.js, sw.js (offline). */
 (() => {
 'use strict';
 
@@ -208,8 +215,8 @@ const DB = {
   open() {
     if (this._db) return Promise.resolve(this._db);
     return new Promise((res, rej) => {
-      const r = indexedDB.open('huntmap', 2);
-      r.onupgradeneeded = () => { const d = r.result; ['areas', 'wps', 'perms', 'tracks', 'routes', 'log'].forEach(s => d.objectStoreNames.contains(s) || d.createObjectStore(s, { keyPath: 'id' })); };
+      const r = indexedDB.open('huntmap', 3);
+      r.onupgradeneeded = () => { const d = r.result; ['areas', 'areadata', 'wps', 'perms', 'tracks', 'routes', 'log'].forEach(s => d.objectStoreNames.contains(s) || d.createObjectStore(s, { keyPath: 'id' })); };
       r.onsuccess = () => { this._db = r.result; res(this._db); };
       r.onerror = () => rej(r.error);
     });
@@ -219,8 +226,39 @@ const DB = {
     return new Promise((res, rej) => { const t = db.transaction(store, mode); const out = fn(t.objectStore(store)); t.oncomplete = () => res(out && out.result); t.onerror = () => rej(t.error); });
   },
   all(s) { return this.tx(s, 'readonly', st => st.getAll()).then(v => v || []); },
+  get(s, id) { return this.tx(s, 'readonly', st => st.get(id)); },
   put(s, o) { return this.tx(s, 'readwrite', st => st.put(o)); },
   del(s, id) { return this.tx(s, 'readwrite', st => st.delete(id)); }
+};
+
+/* Saved offline areas: a small list (name, extent, stats) stays in memory; each area's land data and
+   tile list live in the 'areadata' store and are loaded only for areas overlapping where you're looking. */
+const areaStore = {
+  async init() {
+    const metas = await DB.all('areas');
+    for (const a of metas) if (a.data || a.keys) {   // one-off move from the old single-record layout
+      await DB.put('areadata', { id: a.id, data: a.data || {}, keys: a.keys || [] });
+      a.nKeys = (a.keys || []).length; delete a.data; delete a.keys; await DB.put('areas', a);
+    }
+    state.areas = metas;
+  },
+  async load(bb) {
+    for (const a of state.areas) if (!a.data && bboxIntersects(a.bbox, bb)) { const r = await DB.get('areadata', a.id).catch(() => null); a.data = (r && r.data) || {}; }
+    const far = state.areas.filter(a => a.data && !bboxIntersects(a.bbox, bb));
+    if (far.length > 2) far.forEach(a => { delete a.data; });   // free memory held by distant areas
+  },
+  async save(area) {
+    await DB.put('areadata', { id: area.id, data: area.data, keys: area.keys });
+    const { keys, data, ...meta } = area; meta.nKeys = keys.length; await DB.put('areas', meta);
+    state.areas.push({ ...meta, data });
+  },
+  async remove(a) {
+    state.areas = state.areas.filter(x => x !== a);
+    const all = await DB.all('areadata'), mine = (all.find(x => x.id === a.id) || {}).keys || [];
+    await DB.del('areas', a.id).catch(() => {}); await DB.del('areadata', a.id).catch(() => {});
+    const keep = new Set(); all.filter(x => x.id !== a.id).forEach(x => (x.keys || []).forEach(k => keep.add(k)));
+    const c = await caches.open('tiles-v1'); for (const k of mine) if (!keep.has(k)) await c.delete(k);
+  }
 };
 
 /* ---------------- ArcGIS queries ---------------- */
@@ -473,6 +511,7 @@ const inflight = {};
 async function refreshData() {
   const z = map.getZoom(), vb = viewBBox(0), fb = viewBBox(0.35), lat = map.getCenter().lat, gen = ++state.gen;
   const jobs = []; state.refreshing = true;
+  if (state.areas.length) await areaStore.load(fb);
   for (const L of LAYERS) {
     if (!layerNeeded(L) || z < L.minz) continue;
     const st = state.loaded[L.id], zb = zBucket(z);
@@ -622,6 +661,7 @@ const VCLS = { ok: 'v-ok', restricted: 'v-restricted', no: 'v-no', private: 'v-p
 async function identify(p) {
   setTarget(p);
   showSheet(`<h2>Checking this spot…</h2><p class="sub">${p[1].toFixed(5)}, ${p[0].toFixed(5)}</p>`, { kind: 'id' });
+  if (state.areas.length) await areaStore.load([p[0], p[1], p[0], p[1]]);
   let r = null; const local = identifyLocal(p);
   if (local.coverage && (local.parcel.length || local.hunt.length || local.pcl.length || local.road.length)) renderIdentify(p, local);
   if (online()) { try { r = mergeLocal(await identifyOnline(p), local); } catch { r = null; } }
@@ -757,6 +797,7 @@ async function checkStatus() {
   const p = [me.lng, me.lat], now = Date.now();
   if (state.lastStatusPos && distM(state.lastStatusPos, p) < 20 && now - state.lastStatusAt < 20000) return;
   state.lastStatusPos = p; state.lastStatusAt = now;
+  if (state.areas.length) await areaStore.load([p[0], p[1], p[0], p[1]]);
   let r = identifyLocal(p), v = classify(r);
   if ((v.cat === 'unknown' || !r.parcel.length && !r.hunt.length && !r.pcl.length) && online() && now - state.lastOnlineCheck > 30000) {
     state.lastOnlineCheck = now;
@@ -822,11 +863,11 @@ actions.base = b => {
 sheetBody.addEventListener('change', e => {
   const i = e.target; if (!i.dataset || !i.dataset.act) return;
   if (i.dataset.act === 'vis') { state.vis[i.dataset.k] = i.checked; LS.set('vis', state.vis); applyVisibility(); updateHeat(); scheduleRefresh(); schedulePriv(); }
-  if (i.dataset.act === 'sp') { state.sp[i.dataset.k] = i.checked; LS.set('sp', state.sp); applyVisibility(); updateHeat(); scheduleRefresh(); }
+  if (i.dataset.act === 'sp') { state.sp[i.dataset.k] = i.checked; applyVisibility(); updateHeat(); scheduleRefresh(); }
   if (i.dataset.act === 'alerts') { state.alerts = i.checked; LS.set('alerts', state.alerts); }
 });
-actions.spPreset = () => { SPECIES.forEach(s => { state.sp[s.key] = ['red', 'fallow', 'sika', 'goat', 'pig'].includes(s.key); }); LS.set('sp', state.sp); applyVisibility(); updateHeat(); scheduleRefresh(); layersSheet(); };
-actions.spNone = () => { state.sp = {}; LS.set('sp', state.sp); applyVisibility(); updateHeat(); layersSheet(); };
+actions.spPreset = () => { SPECIES.forEach(s => { state.sp[s.key] = ['red', 'fallow', 'sika', 'goat', 'pig'].includes(s.key); }); applyVisibility(); updateHeat(); scheduleRefresh(); layersSheet(); };
+actions.spNone = () => { state.sp = {}; applyVisibility(); updateHeat(); layersSheet(); };
 $('#btnLayers').onclick = () => (sheetKind === 'layers' && !sheet.hidden ? closeSheet() : layersSheet());
 
 /* ---------------- access directory ---------------- */
@@ -1035,14 +1076,7 @@ sheetBody.addEventListener('change', e => { if (e.target.dataset && e.target.dat
 actions.areaGo = b => { const a = state.areas.find(x => x.id === b.dataset.id); if (a) { map.fitBounds([[a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[3]]], { padding: 20 }); closeSheet(); } };
 actions.areaDel = async b => {
   const a = state.areas.find(x => x.id === b.dataset.id); if (!a || !(await confirmDlg(`Delete “${a.name}” from this device?`, 'Delete'))) return;
-  state.areas = state.areas.filter(x => x !== a);
-  try {
-    // tile lists aren't kept in memory (they can be large), so read them back from storage
-    const stored = await DB.all('areas'), mine = (stored.find(x => x.id === a.id) || a).keys || [];
-    await DB.del('areas', a.id).catch(() => {});
-    const keep = new Set(); stored.filter(x => x.id !== a.id).forEach(x => (x.keys || []).forEach(k => keep.add(k)));
-    const c = await caches.open('tiles-v1'); for (const k of mine) if (!keep.has(k)) await c.delete(k);
-  } catch {}
+  try { await areaStore.remove(a); } catch {}
   toast('Area deleted'); offlineSheet();
 };
 actions.dlCancel = () => { if (dl) dl.cancel = true; };
@@ -1118,7 +1152,7 @@ actions.dlStart = async () => {
     await Promise.all(Array.from({ length: 6 }, worker));
     if (dl.cancel) throw new Error('cancelled');
     area.tiles = uniq.length; area.failed = fail;
-    await DB.put('areas', area); area.nKeys = area.keys.length; delete area.keys; state.areas.push(area);
+    await areaStore.save(area);
     prog(1, `Saved “${name}”: ${uniq.length.toLocaleString()} tiles${fail ? ', ' + fail + ' failed (try again to fill gaps)' : ''}.`);
     toast('Offline area saved');
     const al = $('#areaList'); if (al) al.innerHTML = areaListHtml();
@@ -1164,7 +1198,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.6.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.7 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -1282,16 +1316,16 @@ function hotList(spKey) {
     <p class="sub">${esc(window.HOTSPOT_NOTE || '')}</p>`, { tall: true, kind: 'hot' });
 }
 actions.hotList = () => hotList();
-actions.hotListSp = b => { state.sp[b.dataset.k] = true; LS.set('sp', state.sp); state.vis.heat = true; LS.set('vis', state.vis); applyVisibility(); updateHeat(); scheduleRefresh(); hotList(b.dataset.k); };
+actions.hotListSp = b => { state.sp[b.dataset.k] = true; state.vis.heat = true; LS.set('vis', state.vis); applyVisibility(); updateHeat(); scheduleRefresh(); hotList(b.dataset.k); };
 actions.hotGo = b => {
   const h = HOT.find(x => x.id === b.dataset.id); if (!h) return;
-  if (!selSpecies().some(k => h.sp[k])) { const k = Object.entries(h.sp).sort((a, c) => c[1] - a[1])[0][0]; state.sp[k] = true; LS.set('sp', state.sp); applyVisibility(); updateHeat(); scheduleRefresh(); }
+  if (!selSpecies().some(k => h.sp[k])) { const k = Object.entries(h.sp).sort((a, c) => c[1] - a[1])[0][0]; state.sp[k] = true; applyVisibility(); updateHeat(); scheduleRefresh(); }
   const lats = h.pts.map(p => p[0]), lngs = h.pts.map(p => p[1]), pad = 0.12;
   map.fitBounds([[Math.min(...lngs) - pad, Math.min(...lats) - pad], [Math.max(...lngs) + pad, Math.max(...lats) + pad]], { padding: 40, maxZoom: 11 });
   hotSheet(h.id);
 };
 
-/* ================= v1.2 tools: safety, planning, records ================= */
+/* ================= field tools: safety, planning, records ================= */
 const dest = (p, brg, d) => {
   const dl = d / R, th = brg * rad, f1 = p[1] * rad, l1 = p[0] * rad;
   const f2 = Math.asin(Math.sin(f1) * Math.cos(dl) + Math.cos(f1) * Math.sin(dl) * Math.cos(th));
@@ -1355,7 +1389,7 @@ async function dataFor(id, b, z = 15) {
   return fc;
 }
 
-/* ---------- 1. shooting arc ---------- */
+/* ---------- shooting arc ---------- */
 const FIREARMS = { cf: ['Centrefire rifle', 4000], rim: ['.22 rimfire', 1500], slug: ['Shotgun slug', 1200], shot: ['Shotgun (shot)', 300] };
 const arc = { p: null, brg: null, half: LS.get('arcHalf', 10), gun: LS.get('arcGun', 'cf'), out: '' };
 function arcSheet(out) {
@@ -1446,7 +1480,7 @@ async function runArc() {
   arcSheet(html);
 }
 
-/* ---------- 2. track recording & navigation ---------- */
+/* ---------- track recording & navigation ---------- */
 state.rec = null; state.nav = LS.get('nav', null); state.compass = null; state.tracks = []; state.routes = []; state.log = []; state.mode = null;
 let wakeLock = null;
 async function keepAwake(on) {
@@ -1527,7 +1561,7 @@ actions.trkShow = b => { const t = state.tracks.find(x => x.id === b.dataset.id)
 actions.trkGpx = b => { const t = state.tracks.find(x => x.id === b.dataset.id); if (t) shareFile(t.name.replace(/[^\w-]+/g, '_') + '.gpx', buildGpx({ trks: [{ name: t.name, pts: t.pts }] })); };
 actions.trkDel = async b => { if (!(await confirmDlg('Delete this track?', 'Delete'))) return; state.tracks = state.tracks.filter(x => x.id !== b.dataset.id); await DB.del('tracks', b.dataset.id).catch(() => {}); setData('trk', EMPTY); trackSheet(); };
 
-/* ---------- 3. boundary distance ---------- */
+/* ---------- boundary distance ---------- */
 function boundaryNote(p, cat) {
   const near = [];
   if (cat !== 'private') {
@@ -1547,7 +1581,7 @@ function boundaryNote(p, cat) {
   return near.length ? ' · ' + near[0].t : '';
 }
 
-/* ---------- 4. check-in timer ---------- */
+/* ---------- check-in timer ---------- */
 function renderCheckin() {
   const c = LS.get('checkin', null), el = $('#checkin');
   if (!c || !c.back) { el.hidden = true; return; }
@@ -1577,7 +1611,7 @@ actions.checkinStart = () => {
 };
 actions.tripPos = () => { const { t } = tripText(); location.href = smsHref(t.phone, posText()); };
 
-/* ---------- 5. terrain (hillshade, slope, sunny faces) ---------- */
+/* ---------- terrain (hillshade, slope, sunny faces) ---------- */
 const tile2lat = (y, z) => { const n = Math.PI - 2 * Math.PI * y / 2 ** z; return Math.atan(Math.sinh(n)) / rad; };
 const demURL = (z, x, y) => `${BM}/v1/tiles/elevation/WebMercatorQuad/${z}/${x}/${y}.png?api=${state.key}&pipeline=terrain-rgb`;
 const hillURL = () => `${BM}/v1/tiles/hillshade/WebMercatorQuad/{z}/{x}/{y}.webp?api=${state.key}`;
@@ -1602,25 +1636,42 @@ async function elevAt(p, z = 13) {
   const x = Math.floor(fx), y = Math.floor(fy);
   try { const t = await demTile(z, x, y); const i = Math.min(t.n - 1, Math.floor((fx - x) * t.n)), j = Math.min(t.n - 1, Math.floor((fy - y) * t.n)); const v = t.h[j * t.n + i]; return v < -500 ? null : v; } catch { return null; }
 }
-maplibregl.addProtocol('terrain', async params => {
-  const m = params.url.match(/terrain:\/\/(\d+)\/(\d+)\/(\d+)\?m=(\w+)/); const z = +m[1], x = +m[2], y = +m[3], mode = m[4];
-  const t = await demTile(z, x, y), n = t.n, h = t.h;
-  const px = 40075016.7 * Math.cos(tile2lat(y + 0.5, z) * rad) / 2 ** z / n;
-  const c = mkCanvas(n, n), g = c.getContext('2d'), img = g.createImageData(n, n), o = img.data;
+// Slope / sunny-face shading for one DEM tile. Pure function: runs in a worker (below) or on the main thread.
+function shadeTile(h, n, px, mode) {
+  const o = new Uint8ClampedArray(n * n * 4), R2D = 180 / Math.PI;
   const H = (i, j) => h[Math.min(n - 1, Math.max(0, j)) * n + Math.min(n - 1, Math.max(0, i))];
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const dx = (H(i + 1, j) - H(i - 1, j)) / (2 * px), dy = (H(i, j + 1) - H(i, j - 1)) / (2 * px);
-    const s = Math.atan(Math.hypot(dx, dy)) / rad, k = (j * n + i) * 4; let col = null;
+    const s = Math.atan(Math.hypot(dx, dy)) * R2D, k = (j * n + i) * 4; let col = null;
     if (mode === 'slope') col = s >= 45 ? [124, 58, 237, 190] : s >= 35 ? [220, 38, 38, 165] : s >= 30 ? [249, 115, 22, 145] : s >= 25 ? [250, 204, 21, 115] : null;
-    else if (s >= 5) { const asp = (Math.atan2(-dx, dy) / rad + 360) % 360, nd = angDiff(asp, 0); if (nd <= 45) col = [250, 190, 20, Math.min(170, 50 + s * 4)]; else if (nd >= 135) col = [59, 130, 246, 60]; }
+    else if (s >= 5) { const asp = (Math.atan2(-dx, dy) * R2D + 360) % 360, nd = Math.abs(((asp % 360) + 540) % 360 - 180); if (nd <= 45) col = [250, 190, 20, Math.min(170, 50 + s * 4)]; else if (nd >= 135) col = [59, 130, 246, 60]; }
     if (col) { o[k] = col[0]; o[k + 1] = col[1]; o[k + 2] = col[2]; o[k + 3] = col[3]; }
   }
-  g.putImageData(img, 0, 0);
+  return o;
+}
+const terrainWorker = (() => {
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return null;
+  try {
+    const src = `${shadeTile};onmessage=async e=>{const{id,h,n,px,mode}=e.data;try{const c=new OffscreenCanvas(n,n),g=c.getContext('2d');g.putImageData(new ImageData(shadeTile(h,n,px,mode),n,n),0,0);const b=await(await c.convertToBlob({type:'image/png'})).arrayBuffer();postMessage({id,b},[b]);}catch(err){postMessage({id,err:String(err)});}};`;
+    const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' }))), waiting = new Map(); let seq = 0;
+    w.onmessage = e => { const p = waiting.get(e.data.id); if (!p) return; waiting.delete(e.data.id); e.data.err ? p.rej(new Error(e.data.err)) : p.res(e.data.b); };
+    return (h, n, px, mode) => new Promise((res, rej) => { const id = ++seq; waiting.set(id, { res, rej }); const copy = h.slice(); w.postMessage({ id, h: copy, n, px, mode }, [copy.buffer]); });
+  } catch { return null; }
+})();
+async function shadePng(h, n, px, mode) {
+  if (terrainWorker) { try { return await terrainWorker(h, n, px, mode); } catch {} }
+  const c = mkCanvas(n, n), g = c.getContext('2d'); g.putImageData(new ImageData(shadeTile(h, n, px, mode), n, n), 0, 0);
   const blob = c.convertToBlob ? await c.convertToBlob({ type: 'image/png' }) : await new Promise(res => c.toBlob(res, 'image/png'));
-  return { data: await blob.arrayBuffer() };
+  return blob.arrayBuffer();
+}
+maplibregl.addProtocol('terrain', async params => {
+  const m = params.url.match(/terrain:\/\/(\d+)\/(\d+)\/(\d+)\?m=(\w+)/); const z = +m[1], x = +m[2], y = +m[3], mode = m[4];
+  const t = await demTile(z, x, y);
+  const px = 40075016.7 * Math.cos(tile2lat(y + 0.5, z) * rad) / 2 ** z / t.n;
+  return { data: await shadePng(t.h, t.n, px, mode) };
 });
 
-/* ---------- 6. route planner ---------- */
+/* ---------- route planner ---------- */
 const route = { pts: [], prof: null };
 function drawRoute() {
   const f = [lineFC(route.pts)].filter(x => x !== EMPTY).concat(route.pts.map(p => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } })));
@@ -1685,7 +1736,7 @@ actions.rteGpx = b => { const r = state.routes.find(x => x.id === b.dataset.id);
 actions.rteDel = async b => { if (!(await confirmDlg('Delete this route?', 'Delete'))) return; state.routes = state.routes.filter(x => x.id !== b.dataset.id); await DB.del('routes', b.dataset.id).catch(() => {}); renderRoutes(); routeSheet(); };
 actions.mRoute = () => routeSheet();
 
-/* ---------- 7. scent cone ---------- */
+/* ---------- scent cone ---------- */
 let lastWind = null;
 function scentAt(i) {
   if (!lastWind) return;
@@ -1697,7 +1748,7 @@ function scentAt(i) {
 actions.scent = b => { scentAt(+b.dataset.i); closeSheet(); };
 actions.scentClear = () => { setData('scent', EMPTY); toast('Scent cone cleared'); };
 
-/* ---------- 8. huts / campsites / tracks + feature popups ---------- */
+/* ---------- huts / campsites / tracks + feature popups ---------- */
 function featureSheet(f) {
   const lid = f.layer.id, p = f.properties || {};
   if (lid === 'log-c') { logDetail(p.id); return; }
@@ -1712,7 +1763,7 @@ function featureSheet(f) {
     <div class="btnrow">${links.slice(0, 2).map(([k, v], i) => `<a class="btn ${i ? 'ghost' : ''}" href="${esc(v)}" target="_blank" rel="noopener">${/book/i.test(k) ? 'Book' : 'DOC page'}</a>`).join('')}${c ? `<button class="btn ghost" data-act="saveWp" data-lng="${c[0]}" data-lat="${c[1]}">Save waypoint</button><a class="btn ghost" href="https://www.google.com/maps/dir/?api=1&destination=${c[1]},${c[0]}" target="_blank" rel="noopener">Drive</a>` : ''}</div>`, { kind: 'feat' });
 }
 
-/* ---------- 9. hunt log ---------- */
+/* ---------- hunt log ---------- */
 let pendingPhoto = null;
 function renderLog() {
   setData('log', { type: 'FeatureCollection', features: state.log.map(e => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lng, e.lat] }, properties: { id: e.id, kind: e.kind } })) });
@@ -1775,7 +1826,7 @@ actions.logShow = b => logDetail(b.dataset.id);
 actions.logGo = b => { const e = state.log.find(x => x.id === b.dataset.id); if (e) { state.vis.log = true; LS.set('vis', state.vis); applyVisibility(); map.flyTo({ center: [e.lng, e.lat], zoom: 15 }); closeSheet(); } };
 actions.logDel = async b => { if (!(await confirmDlg('Delete this log entry?', 'Delete'))) return; state.log = state.log.filter(x => x.id !== b.dataset.id); await DB.del('log', b.dataset.id).catch(() => {}); renderLog(); logSheet(); };
 
-/* ---------- 10. share a trip ---------- */
+/* ---------- share a trip ---------- */
 const b64u = bytes => { let s = ''; bytes.forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const unb64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 async function pack(obj) {
@@ -1843,7 +1894,7 @@ actions.mArc = () => arcSheet();
 actions.mTrack = trackSheet;
 
 /* internals for the habitat model (model.js) */
-window.__hamAPI = { map, state, actions, LS, showSheet, closeSheet, toast, demTile, sunTimes, BM, distM, bearing, compass, fmtDist, fmtTime, fmtDate, esc, fetchT, online, SPECIES, setNav, setTarget, getWind: () => lastWind, setWind: w => { lastWind = w; }, resolveStyle, mkCanvas };
+window.HuntMap = { loadAreas: bb => areaStore.load(bb), classify, llToNZTM, nztmToLL, map, state, actions, LS, showSheet, closeSheet, toast, demTile, sunTimes, BM, distM, bearing, compass, fmtDist, fmtTime, fmtDate, esc, fetchT, online, SPECIES, setNav, setTarget, getWind: () => lastWind, setWind: w => { lastWind = w; }, resolveStyle, mkCanvas };
 
 /* ---------------- start-up ---------------- */
 (async () => {
@@ -1851,7 +1902,7 @@ window.__hamAPI = { map, state, actions, LS, showSheet, closeSheet, toast, demTi
     [state.wps, state.perms, state.tracks, state.routes, state.log] = await Promise.all(['wps', 'perms', 'tracks', 'routes', 'log'].map(st => DB.all(st)));
   } catch { /* storage unavailable: app still works online */ }
   renderWps(); renderRoutes(); renderLog(); addAccessPins(); renderCheckin(); updateNav();
-  try { state.areas = await DB.all('areas'); for (const a of state.areas) if (a.keys) { a.nKeys = a.keys.length; delete a.keys; } } catch {}
+  try { await areaStore.init(); } catch {}
   scheduleRefresh();
   const unfinished = state.tracks.find(t => !t.end); if (unfinished) { unfinished.end = unfinished.pts.length ? unfinished.pts[unfinished.pts.length - 1][3] : unfinished.start; DB.put('tracks', unfinished).catch(() => {}); }
   checkIncoming();
@@ -1871,5 +1922,4 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
 }
 
-window.__ham = { state, llToNZTM, nztmToLL, sunTimes, classify, makeKey, keyAgeDays, countTiles, normKey };
 })();
