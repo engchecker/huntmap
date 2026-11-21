@@ -278,6 +278,15 @@ const map = new maplibregl.Map({
   pixelRatio: Math.min(window.devicePixelRatio || 1, 2), refreshExpiredTiles: false, fadeDuration: 150
 });
 map.touchZoomRotate.disableRotation();
+// keep the map filling the screen: iOS can create it before layout settles (app start, reload, rotation, keyboard)
+{
+  const fit = () => { try { map.resize(); } catch {} };
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(document.getElementById('map'));
+  ['load', 'pageshow', 'orientationchange', 'resize'].forEach(ev => window.addEventListener(ev, () => { fit(); setTimeout(fit, 300); }));
+  if (window.visualViewport) visualViewport.addEventListener('resize', fit);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(fit, 200); });
+  map.once('load', fit); setTimeout(fit, 500); setTimeout(fit, 1500);
+}
 map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: 'DOC, LINZ, Herenga ā Nuku — CC BY 4.0' }), 'bottom-left');
 map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: 'metric' }), 'bottom-left');
 
@@ -1155,7 +1164,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.6 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.6.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
