@@ -123,3 +123,8 @@ input[type=range]{width:100%;height:40px;accent-color:var(--blaze);margin:0 0 6p
 /* Find animals */
 .findpin{width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:#b91c1c;color:#fff;font:700 14px/24px system-ui,sans-serif;text-align:center;padding:0;box-shadow:0 1px 4px rgba(0,0,0,.45);cursor:pointer}
 .sheet details{margin:8px 0}.sheet summary{font-weight:600;cursor:pointer;padding:6px 0}
+/* iOS Safari draws native select/date controls white and ignores the background unless appearance is off */
+select,input[type=date],input[type=datetime-local]{-webkit-appearance:none;appearance:none;background-color:var(--field);color:var(--cardInk);min-height:44px;text-align:left}
+select{padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238a968e' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+input[type=date]::-webkit-date-and-time-value,input[type=datetime-local]::-webkit-date-and-time-value{text-align:left;color:var(--cardInk)}
+select option{background:var(--card);color:var(--cardInk)}
