@@ -1201,6 +1201,7 @@ function menuSheet() {
     <button data-act="permList"><span>✍</span><span>Permissions log<small>Your landowner permissions and conditions</small></span></button>
     <button data-act="mTrip"><span>🧭</span><span>Trip intentions &amp; check-in<small>Text your plan; overdue reminder</small></span></button>
     <button data-act="mCond"><span>🌬</span><span>Wind, scent &amp; sun<small>Wind forecast, scent cone, first and last light</small></span></button>
+    ${isInstalled() ? '' : '<button data-act="mInstall"><span>📲</span><span>Install as an app<small>Home-screen icon, full screen, best offline</small></span></button>'}
     <button data-act="mSettings"><span>⚙</span><span>Settings &amp; help<small>Map key, alerts, data sources, disclaimer</small></span></button></div>`, { kind: 'menu' });
 }
 actions.mAccess = () => accessList();
@@ -1223,7 +1224,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 2.0 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 2.0.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -1922,6 +1923,63 @@ actions.mTrack = trackSheet;
 window.HuntMap = { modeTap, buildGpx, shareFile, saveRoute: async r => { state.routes.push(r); await DB.put('routes', r).catch(() => {}); state.vis.routes = true; LS.set('vis', state.vis); applyVisibility(); renderRoutes(); }, loadAreas: bb => areaStore.load(bb), classify, llToNZTM, nztmToLL, dataFor, nearestEdge, xy, segDist, featContains, profileOf, profileSvg, walkTime, fmtDur, pickName, LINKS, uid, DB, confirmDlg,
   landAt: async p => { if (state.areas.length) await areaStore.load([p[0], p[1], p[0], p[1]]); const local = identifyLocal(p); if (!online()) return local; try { return mergeLocal(await identifyOnline(p), local); } catch { return local; } }, map, state, actions, LS, showSheet, closeSheet, toast, demTile, sunTimes, BM, distM, bearing, compass, fmtDist, fmtTime, fmtDate, esc, fetchT, online, SPECIES, setNav, setTarget, getWind: () => lastWind, setWind: w => { lastWind = w; }, resolveStyle, mkCanvas };
 
+/* ---------------- first-run welcome and "install as an app" ---------------- */
+const isInstalled = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; });
+function deviceInfo() {
+  const ua = navigator.userAgent || '';
+  const ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1), android = /Android/.test(ua);
+  const browser = /CriOS/.test(ua) ? 'chrome' : /FxiOS/.test(ua) ? 'firefox' : /EdgiOS|EdgA|Edg\//.test(ua) ? 'edge' : /Firefox\//.test(ua) ? 'firefox' : /SamsungBrowser/.test(ua) ? 'samsung' : /Chrome\//.test(ua) ? 'chrome' : /Safari\//.test(ua) ? 'safari' : 'other';
+  return { os: ios ? 'ios' : android ? 'android' : 'desktop', browser };
+}
+const INSTALL = {
+  ios: {
+    safari: ['Tap the <b>Share</b> button (square with an arrow)', 'Scroll down and tap <b>Add to Home Screen</b>', 'Tap <b>Add</b>'],
+    chrome: ['Tap the <b>Share</b> button in the address bar', 'Tap <b>Add to Home Screen</b>', 'Tap <b>Add</b>'],
+    firefox: ['Tap the <b>menu</b> (☰)', 'Tap <b>Share</b>, then <b>Add to Home Screen</b>', 'Tap <b>Add</b>'],
+    edge: ['Tap the <b>menu</b> (…)', 'Tap <b>Share</b>, then <b>Add to Home Screen</b>', 'Tap <b>Add</b>']
+  },
+  android: {
+    chrome: ['Tap the <b>⋮</b> menu', 'Tap <b>Add to home screen</b> (or <b>Install app</b>)', 'Tap <b>Install</b>'],
+    firefox: ['Tap the <b>⋮</b> menu', 'Tap <b>Add app to Home screen</b> (or <b>Install</b>)', 'Confirm'],
+    samsung: ['Tap the <b>menu</b> (☰)', 'Tap <b>Add page to</b> → <b>Home screen</b>', 'Tap <b>Add</b>'],
+    edge: ['Tap the <b>…</b> menu', 'Tap <b>Add to phone</b>', 'Tap <b>Install</b>']
+  },
+  desktop: {
+    chrome: ['Click the <b>install</b> icon at the right of the address bar', 'Or use <b>⋮</b> → <b>Cast, save and share</b> → <b>Install page as app</b>', 'It opens in its own window'],
+    edge: ['Click the <b>App available</b> icon in the address bar', 'Or use <b>…</b> → <b>Apps</b> → <b>Install this site as an app</b>', 'It opens in its own window'],
+    firefox: ['Firefox on a computer can’t install web apps without an add-on', 'Use Chrome or Edge to install it, or bookmark this page']
+  }
+};
+const LABEL = { ios: 'iPhone / iPad', android: 'Android', desktop: 'Computer', safari: 'Safari', chrome: 'Chrome', firefox: 'Firefox', edge: 'Edge', samsung: 'Samsung Internet' };
+function installHtml() {
+  if (isInstalled()) return '<p class="sub">You’re using the installed app. 👍</p>';
+  const d = deviceInfo(), mine = (INSTALL[d.os] || {})[d.browser];
+  const steps = a => `<ol class="sub">${a.map(x => `<li>${x}</li>`).join('')}</ol>`;
+  const others = Object.entries(INSTALL).map(([os, bs]) => Object.entries(bs).filter(([b]) => !(os === d.os && b === d.browser)).map(([b, a]) => `<p class="sub"><b>${LABEL[os]}, ${LABEL[b]}</b></p>${steps(a)}`).join('')).join('');
+  return `<h3>Install it as an app</h3>
+    <p class="sub">Installing gives you a home-screen icon, full-screen maps and the most reliable offline use.</p>
+    ${installPrompt ? '<div class="btnrow"><button class="btn" data-act="installNow">Install now</button></div>' : ''}
+    ${mine ? `<p class="sub"><b>${LABEL[d.os]}, ${LABEL[d.browser]}:</b></p>${steps(mine)}` : ''}
+    <details><summary>${mine ? 'Other browsers and devices' : 'How to install on your browser'}</summary>${others}</details>
+    <p class="sub">Save offline areas from the icon you’ll use in the field: each browser and installed app keeps its own offline maps. Allow location when asked.${d.os === 'ios' ? ' On iPhone, Safari is the most reliable.' : ''}</p>`;
+}
+function welcomeSheet() {
+  showSheet(`<h2>Hunt Access NZ</h2><p>Tap anywhere on the map to see who owns or manages the land and whether you can hunt there.</p>
+    <ul class="sub"><li><b>Dark green</b>: DOC land</li><li><b>Lime</b>: huntable with just a DOC permit (amber: restricted or ballot; red stripes: no hunting)</li><li><b>Orange</b>: legal roads; <b>dark orange, dashed</b>: paper roads. <b>Teal</b>: marginal strips. <b>Indigo, dashed</b>: forestry access easements. <b>Blue</b>: other public access</li><li><b>Rose</b>: everything else, which needs landowner permission (zoom 13+)</li></ul>
+    <p class="sub">Before a trip, use <b>Offline maps</b> to save the area so status checks work with no signal. Turn on the location button for live status and boundary alerts. The ••• menu has the trip report, walking routes, Find animals and the rules sheet.</p>
+    ${installHtml()}
+    <p class="sub">A planning aid only. Boundaries are indicative. You’re responsible for permission and permits.</p>
+    <div class="btnrow"><button class="btn" data-act="welcomeOk">Got it</button></div>`, { tall: true, kind: 'welcome' });
+}
+function installSheet(nudge = false) {
+  showSheet(`<h2>${nudge ? 'Tip: install the app' : 'Install as an app'}</h2>${installHtml()}<div class="btnrow"><button class="btn ghost" data-act="closeSheet">Close</button></div>`, { tall: true, kind: 'install' });
+}
+actions.installNow = async () => { if (!installPrompt) return; installPrompt.prompt(); try { await installPrompt.userChoice; } catch {} installPrompt = null; closeSheet(); };
+actions.mInstall = () => installSheet();
+actions.closeSheet = () => closeSheet();
+
 /* ---------------- start-up ---------------- */
 (async () => {
   try {
@@ -1932,15 +1990,12 @@ window.HuntMap = { modeTap, buildGpx, shareFile, saveRoute: async r => { state.r
   scheduleRefresh();
   const unfinished = state.tracks.find(t => !t.end); if (unfinished) { unfinished.end = unfinished.pts.length ? unfinished.pts[unfinished.pts.length - 1][3] : unfinished.start; DB.put('tracks', unfinished).catch(() => {}); }
   checkIncoming();
-  if (!LS.get('welcomed', false) && !/^#trip=/.test(location.hash)) {
-    showSheet(`<h2>Hunt Access NZ</h2><p>Tap anywhere on the map to see who owns or manages the land and whether you can hunt there.</p>
-      <ul class="sub"><li><b>Dark green</b>: DOC land</li><li><b>Lime</b>: huntable with just a DOC permit (amber: restricted or ballot; red stripes: no hunting)</li><li><b>Orange</b>: legal and paper roads. <b>Blue</b>: other public access to travel through</li><li><b>Rose</b>: everything else, which needs landowner permission (zoom 13+)</li></ul>
-      <p class="sub">Before a trip, use <b>Offline maps</b> to save the area so status checks work with no signal. Turn on the location button for live status and boundary alerts.</p>
-      <p class="sub">A planning aid only. Boundaries are indicative. You’re responsible for permission and permits.</p>
-      <div class="btnrow"><button class="btn" data-act="welcomeOk">Got it</button></div>`, { kind: 'welcome' });
+  if (!/^#trip=/.test(location.hash)) {
+    if (!LS.get('welcomed', false)) welcomeSheet();
+    else if (!isInstalled() && !LS.get('installNudge', false)) { LS.set('installNudge', true); installSheet(true); }
   }
 })();
-actions.welcomeOk = () => { LS.set('welcomed', true); closeSheet(); };
+actions.welcomeOk = () => { LS.set('welcomed', true); LS.set('installNudge', true); closeSheet(); };
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   const hadSW = !!navigator.serviceWorker.controller; let reloaded = false;
   // when a new version takes over, reload once so it's used straight away
