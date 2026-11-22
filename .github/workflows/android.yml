@@ -14,13 +14,13 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -34,7 +34,14 @@ jobs:
         working-directory: app/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug -PversionCode=${{ github.run_number }} --no-daemon --stacktrace
+          set -o pipefail
+          ./gradlew assembleDebug -PversionCode=${{ github.run_number }} --no-daemon 2>&1 | tee build.log
+      - name: Report build errors
+        if: failure()
+        working-directory: app/android
+        run: |
+          # surface the Gradle error as an annotation (readable without signing in)
+          grep -A25 -E "What went wrong|error:|FAILURE" build.log | head -60 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g' | sed 's/^/::error title=Gradle::/'
       - name: Name the APK
         run: |
           VER=$(node -p "require('./app/package.json').version")
