@@ -1,0 +1,11 @@
+{
+  "appId": "nz.huntaccess.app",
+  "appName": "Hunt Access NZ",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#16261d"
+  },
+  "plugins": {
+    "SplashScreen": { "launchAutoHide": true }
+  }
+}

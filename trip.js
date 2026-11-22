@@ -60,7 +60,7 @@ async function forecast(p, d0, d1) {
   const ahead = (d1 - new Date()) / 864e5;
   if (ahead > 15.5) return { err: 'Forecasts only run about 16 days ahead. Check again closer to the trip.' };
   try {
-    const u = `https://api.open-meteo.com/v1/forecast?latitude=${p[1].toFixed(4)}&longitude=${p[0].toFixed(4)}&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover&timezone=Pacific%2FAuckland&start_date=${dayStr(d0)}&end_date=${dayStr(d1)}&wind_speed_unit=kmh`;
+    const u = A.meteoURL(`latitude=${p[1].toFixed(4)}&longitude=${p[0].toFixed(4)}&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover&timezone=Pacific%2FAuckland&start_date=${dayStr(d0)}&end_date=${dayStr(d1)}&wind_speed_unit=kmh`);
     const j = await (await fetchT(u, 15000)).json(); if (!j.hourly) throw 0;
     A.setWind({ p, H: j.hourly });
     return { H: j.hourly };
@@ -179,7 +179,7 @@ function weatherHtml(R) {
     }
     return `<li><span class="t">${fmtDay(d)}</span><br><span class="sub">First light ${tw ? fmtTime(tw.rise) : '–'} · sunrise ${s ? fmtTime(s.rise) : '–'} · sunset ${s ? fmtTime(s.set) : '–'} · last light ${tw ? fmtTime(tw.set) : '–'} · ${m.name} (${m.illum}%)</span>${w}</li>`;
   }).join('');
-  return `<ul class="list">${rows}</ul>${wx.err ? `<p class="warnbox">${esc(wx.err)}</p>` : '<p class="sub">Forecast: Open-Meteo. Wind arrows: “from” is where it blows from; approach from the downwind side.</p>'}`;
+  return `<ul class="list">${rows}</ul>${wx.err ? `<p class="warnbox">${esc(wx.err)}</p>` : '<p class="sub">${A.METEO_CREDIT}. Wind arrows: “from” is where it blows from; approach from the downwind side.</p>'}`;
 }
 function spotsHtml(R) {
   return R.runs.map(run => `<div class="rp-run"><h3>${run.label} <span class="sub">${fmtTime(run.t)}${run.res.wind.from != null ? ` · wind ${compass(run.res.wind.from)} ${Math.round(run.res.wind.spd)} km/h` : ' · calm'}</span></h3>

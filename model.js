@@ -187,7 +187,7 @@ async function windFor(p, t, mode) {
   if (lw && distM(lw.p, p) < 30000) { const i = pick(lw.H); if (i >= 0) return { from: lw.H.wind_direction_10m[i], spd: lw.H.wind_speed_10m[i], src: 'Open-Meteo forecast' }; }
   if (!online()) return { from: null, spd: 0, src: 'unknown (offline): assumed calm' };
   try {
-    const u = `https://api.open-meteo.com/v1/forecast?latitude=${p[1].toFixed(4)}&longitude=${p[0].toFixed(4)}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability&timezone=Pacific%2FAuckland&forecast_days=7&wind_speed_unit=kmh`;
+    const u = A.meteoURL(`latitude=${p[1].toFixed(4)}&longitude=${p[0].toFixed(4)}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability&timezone=Pacific%2FAuckland&forecast_days=7&wind_speed_unit=kmh`);
     const j = await (await fetchT(u, 12000)).json(); A.setWind({ p, H: j.hourly });
     const i = pick(j.hourly); if (i >= 0) return { from: j.hourly.wind_direction_10m[i], spd: j.hourly.wind_speed_10m[i], src: 'Open-Meteo forecast' };
   } catch {}
@@ -426,7 +426,7 @@ function resultSheet() {
   }).join('');
   const rutLbl = !multi && res.per[0].rut ? ' · ' + res.per[0].P.rut.label : '';
   showSheet(`<h2>${esc(title)}</h2>
-    <p class="sub">${multi ? esc(names.join(', ')) + ' · ' : ''}${d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })} ${fmtTime(d)} · ${PERIOD_TXT[res.period]} · ${res.season}${rutLbl} · wind ${esc(cardinalTxt(res))}</p>
+    <p class="sub">${multi ? esc(names.join(', ')) + ' · ' : ''}${d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })} ${fmtTime(d)} · ${PERIOD_TXT[res.period]} · ${res.season}${rutLbl} · wind ${esc(cardinalTxt(res))}${/Open-Meteo/.test(res.wind.src || '') ? ' · ' + A.METEO_CREDIT : ''}</p>
     ${warn.map(x => `<p class="warnbox">${esc(x)}</p>`).join('')}
     <h3>Top spots in view</h3>
     <ul class="list">${res.spots.map((s, n) => { const rs = reasons(res, s); return `<li><span class="t">${n + 1}. ${multi ? esc(res.per[s.n].P.name) + ': ' : ''}${esc(rs[0])}</span> <span class="badge">${Math.round(100 * s.v)}</span><br><span class="sub">${esc(rs.slice(1, 3).join(' · '))}${me ? ` · ${fmtDist(distM(me, s.p))} ${compass(bearing(me, s.p))}` : ''}</span><div class="btnrow"><button class="btn small" data-act="findSpot" data-n="${n}">Details</button><button class="btn small ghost" data-act="findNav" data-n="${n}">Get me there</button></div></li>`; }).join('') || '<li class="sub">Nothing stood out. Try another time of day, or zoom out.</li>'}</ul>

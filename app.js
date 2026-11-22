@@ -138,6 +138,11 @@ const DOC = 'https://services1.arcgis.com/3JjYDyG3oajxU6HO/ArcGIS/rest/services/
 const LINZ = 'https://services.arcgis.com/xdsHIIxuCWByZiCB/arcgis/rest/services/';
 const PAA = 'https://services2.arcgis.com/b5ADKIcWivL5vNaV/ArcGIS/rest/services/Public_Access_Areas/FeatureServer/';
 const BM = 'https://basemaps.linz.govt.nz';
+const CFG = window.HM_CONFIG || {};
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+// Open-Meteo: the commercial endpoint when a key is configured, otherwise the free non-commercial API.
+const meteoURL = q => CFG.openMeteoKey ? `https://customer-api.open-meteo.com/v1/forecast?${q}&apikey=${encodeURIComponent(CFG.openMeteoKey)}` : `https://api.open-meteo.com/v1/forecast?${q}`;
+const METEO_CREDIT = '<a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>';
 const URLS = {
   titles: LINZ + 'LINZ_NZ_Property_Titles/FeatureServer/0',
   addresses: LINZ + 'LINZ_NZ_Addresses/FeatureServer/0',
@@ -210,6 +215,8 @@ function keyAgeDays(k) {
   for (const ch of k.slice(1, 11).toUpperCase()) t = t * 32 + A.indexOf(ch);
   return (Date.now() - t) / 864e5;
 }
+// a configured developer key replaces the self-made standard key (a key the user pasted in still wins)
+if (CFG.linzKey && (!state.key || state.key[0] === 'c')) state.key = CFG.linzKey;
 if (!state.key || (state.key[0] === 'c' && keyAgeDays(state.key) > 85)) { state.key = makeKey(); LS.set('linzKey', state.key); }
 
 /* ---------------- IndexedDB ---------------- */
@@ -1054,7 +1061,7 @@ async function showConditions(p) {
   showSheet(head + `<h3>Wind forecast</h3><p class="sub">${online() ? 'Loading…' : 'Wind forecast needs a connection.'}</p>`, { kind: 'cond' });
   if (!online()) return;
   try {
-    const u = `https://api.open-meteo.com/v1/forecast?latitude=${p[1].toFixed(4)}&longitude=${p[0].toFixed(4)}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability&timezone=Pacific%2FAuckland&forecast_days=3&wind_speed_unit=kmh`;
+    const u = meteoURL(`latitude=${p[1].toFixed(4)}&longitude=${p[0].toFixed(4)}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m,precipitation_probability&timezone=Pacific%2FAuckland&forecast_days=3&wind_speed_unit=kmh`);
     const j = await (await fetchT(u, 12000)).json();
     const H = j.hourly, start = H.time.findIndex(t => new Date(t) >= new Date(now.getTime() - 36e5));
     const cells = [];
@@ -1063,7 +1070,7 @@ async function showConditions(p) {
     }
     lastWind = { p, H };
     const nowI = Math.max(start, 0);
-    showSheet(head + `<h3>Wind forecast (km/h, gusts)</h3><p class="sub">Arrows point where the wind is blowing <b>to</b>, which is where your scent goes. Tap a time to draw the scent cone on the map.</p><div class="btnrow"><button class="btn small" data-act="scent" data-i="${nowI}">Scent cone now</button><button class="btn small ghost" data-act="scentClear">Clear scent cone</button></div><div class="wind">${cells.join('')}</div><p class="sub">Forecast: Open-Meteo.</p>`, { kind: 'cond' });
+    showSheet(head + `<h3>Wind forecast (km/h, gusts)</h3><p class="sub">Arrows point where the wind is blowing <b>to</b>, which is where your scent goes. Tap a time to draw the scent cone on the map.</p><div class="btnrow"><button class="btn small" data-act="scent" data-i="${nowI}">Scent cone now</button><button class="btn small ghost" data-act="scentClear">Clear scent cone</button></div><div class="wind">${cells.join('')}</div><p class="sub">${METEO_CREDIT}</p>`, { kind: 'cond' });
   } catch { showSheet(head + `<p class="sub">Couldn’t load the wind forecast.</p>`, { kind: 'cond' }); }
 }
 
@@ -1233,13 +1240,25 @@ function settingsSheet() {
     <h3>How to read the map</h3>
     <p class="sub">Tap anywhere for a land status verdict. Dark green: DOC land. Lime: huntable with a DOC permit (amber: restricted or ballot; red stripes: no hunting). Orange: legal and paper roads. Blue: other public access to travel through. Rose: needs landowner permission (purple: Māori land; slate: riverbed; grey: other Crown or reserve land to check). Turn each category on or off under Map &amp; layers. Public access never means permission to shoot.</p>
     <h3>Data sources</h3>
-    <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
+    <p class="sub">DOC, Toitū Te Whenua LINZ, Herenga ā Nuku Aotearoa and Open-Meteo, under CC BY 4.0.</p>
+    <div class="btnrow"><button class="btn small ghost" data-act="credits">Credits &amp; licences</button><a class="btn small ghost" href="${esc(CFG.privacyUrl || 'privacy.html')}" target="_blank" rel="noopener">Privacy policy</a></div>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 2.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version ${esc(CFG.version || '')}${NATIVE ? ' (Android app)' : ''} · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
+actions.credits = () => showSheet(`<h2>Credits &amp; licences</h2>
+    <p class="sub">Hunt Access NZ uses open government and open-source data. None of these organisations endorses the app.</p>
+    <h3>Maps and land data</h3>
+    <ul class="sub">
+      <li>Basemaps, aerial imagery, elevation, land parcels, titles (no owner names), addresses, roads and place names: sourced from <a href="https://www.linz.govt.nz/" target="_blank" rel="noopener">Toitū Te Whenua Land Information New Zealand</a> and licensed for reuse under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://www.linz.govt.nz/products-services/data/licensing-and-using-data/attributing-linz-basemaps-data" target="_blank" rel="noopener">LINZ Basemaps copyright and attribution</a>.</li>
+      <li>Public conservation land, recreational hunting areas, pesticide operations, huts, tracks, campsites and animal distribution: <a href="https://doc-deptconservation.opendata.arcgis.com/" target="_blank" rel="noopener">Department of Conservation Open Data</a>, CC BY 4.0.</li>
+      <li>Public access areas, unformed legal roads, marginal strips and easements: <a href="https://www.herengaanuku.govt.nz/" target="_blank" rel="noopener">Herenga ā Nuku Aotearoa, the Outdoor Access Commission</a>, CC BY 4.0.</li>
+    </ul>
+    <h3>Weather</h3><p class="sub">${METEO_CREDIT}, CC BY 4.0.</p>
+    <h3>Software</h3><p class="sub"><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD 3-Clause licence).</p>
+    <div class="btnrow"><button class="btn ghost" data-act="mSettings">Back</button></div>`, { tall: true, kind: 'settings' });
 actions.clearRt = async () => { try { await caches.delete('tiles-rt'); toast('Browsing cache cleared (saved areas kept)'); } catch {} };
 $('#btnMenu').onclick = () => (sheetKind === 'menu' && !sheet.hidden ? closeSheet() : menuSheet());
 
@@ -1524,7 +1543,7 @@ let wakeLock = null;
 async function keepAwake(on) {
   try { if (on && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; } } catch {}
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && state.rec && LS.get('wake', true)) keepAwake(true); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state.rec && LS.get('wake', !NATIVE)) keepAwake(true); });
 let compassBound = false;
 async function compassOn() {
   try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { const r = await DeviceOrientationEvent.requestPermission(); if (r !== 'granted') { toast('Compass permission denied'); return; } } } catch {}
@@ -1563,7 +1582,7 @@ function trackSheet() {
     <h3>Record your route</h3>
     ${r ? `<p>Recording <b>${esc(r.name)}</b>: ${fmtDist(trackLen(r.pts))} · ${fmtDur(Date.now() - r.start)} · ${r.pts.length} points</p><div class="btnrow"><button class="btn" data-act="recStop">Stop &amp; save</button></div>`
         : `<div class="btnrow"><button class="btn" data-act="recStart">Start recording</button></div>`}
-    <label class="toggle"><input type="checkbox" data-act="wake" ${LS.get('wake', true) ? 'checked' : ''}><span>Keep screen on while recording<br><span class="sub">Phones pause web-app GPS when the screen locks</span></span></label>
+    <label class="toggle"><input type="checkbox" data-act="wake" ${LS.get('wake', !NATIVE) ? 'checked' : ''}><span>Keep screen on while recording<br><span class="sub">${NATIVE ? 'Optional: the app keeps recording with the screen off' : 'Phones pause web-app GPS when the screen locks'}</span></span></label>
     <h3>Navigate back</h3>
     ${nav ? `<p>Navigating to <b>${esc(nav.name)}</b>${me ? `: ${fmtDist(distM(me, nav.p))} ${compass(bearing(me, nav.p))}` : ''}</p>` : '<p class="sub">Not navigating.</p>'}
     <div class="btnrow">${me ? '<button class="btn" data-act="navMarkTruck">Mark truck here</button>' : ''}${vehicles.length ? `<button class="btn ghost" data-act="navTo" data-id="${vehicles[0].id}">To ${esc(vehicles[0].name)}</button>` : ''}${state.target ? '<button class="btn ghost" data-act="navTarget">To selected point</button>' : ''}${nav ? '<button class="btn ghost" data-act="navStop">Stop</button>' : ''}</div>
@@ -1577,11 +1596,12 @@ actions.recStart = async () => {
   if (state.watchId == null) startGPS();
   state.rec = { id: uid(), name: 'Track ' + new Date().toLocaleString('en-NZ', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: TZ }), start: Date.now(), pts: [] };
   if (state.me) recordPos({ longitude: state.me.lng, latitude: state.me.lat, accuracy: state.me.acc, altitude: null }, Date.now());
-  if (LS.get('wake', true)) keepAwake(true);
+  if (window.HMNative) window.HMNative.bgStart(l => onPos({ coords: { longitude: l.longitude, latitude: l.latitude, accuracy: l.accuracy, altitude: l.altitude, heading: l.bearing, speed: l.speed }, timestamp: l.time || Date.now() }));  // keeps recording with the screen off
+  if (LS.get('wake', !NATIVE)) keepAwake(true);
   toast('Recording started'); trackSheet();
 };
 actions.recStop = async () => {
-  const r = state.rec; if (!r) return; r.end = Date.now(); state.rec = null; keepAwake(false);
+  const r = state.rec; if (!r) return; r.end = Date.now(); state.rec = null; keepAwake(false); if (window.HMNative) window.HMNative.bgStop();
   if (r.pts.length > 1) { await DB.put('tracks', r).catch(() => {}); state.tracks = state.tracks.filter(t => t.id !== r.id).concat(r); toast('Track saved: ' + fmtDist(trackLen(r.pts))); }
   else { DB.del('tracks', r.id).catch(() => {}); toast('Track too short to save'); }
   trackSheet();
@@ -1932,11 +1952,11 @@ actions.mArc = () => arcSheet();
 actions.mTrack = trackSheet;
 
 /* internals for the habitat model (model.js) */
-window.HuntMap = { modeTap, buildGpx, shareFile, saveRoute: async r => { state.routes.push(r); await DB.put('routes', r).catch(() => {}); state.vis.routes = true; LS.set('vis', state.vis); applyVisibility(); renderRoutes(); }, loadAreas: bb => areaStore.load(bb), classify, llToNZTM, nztmToLL, dataFor, nearestEdge, xy, segDist, featContains, profileOf, profileSvg, walkTime, fmtDur, pickName, LINKS, uid, DB, confirmDlg,
+window.HuntMap = { meteoURL, METEO_CREDIT, NATIVE, modeTap, buildGpx, shareFile, saveRoute: async r => { state.routes.push(r); await DB.put('routes', r).catch(() => {}); state.vis.routes = true; LS.set('vis', state.vis); applyVisibility(); renderRoutes(); }, loadAreas: bb => areaStore.load(bb), classify, llToNZTM, nztmToLL, dataFor, nearestEdge, xy, segDist, featContains, profileOf, profileSvg, walkTime, fmtDur, pickName, LINKS, uid, DB, confirmDlg,
   landAt: async p => { if (state.areas.length) await areaStore.load([p[0], p[1], p[0], p[1]]); const local = identifyLocal(p); if (!online()) return local; try { return mergeLocal(await identifyOnline(p), local); } catch { return local; } }, map, state, actions, LS, showSheet, closeSheet, toast, demTile, sunTimes, BM, distM, bearing, compass, fmtDist, fmtTime, fmtDate, esc, fetchT, online, SPECIES, setNav, setTarget, getWind: () => lastWind, setWind: w => { lastWind = w; }, resolveStyle, mkCanvas };
 
 /* ---------------- first-run welcome and "install as an app" ---------------- */
-const isInstalled = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+const isInstalled = () => NATIVE || (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; });
 function deviceInfo() {

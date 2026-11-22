@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Hunt Access NZ</string>
+    <string name="title_activity_main">Hunt Access NZ</string>
+    <string name="package_name">nz.huntaccess.app</string>
+    <string name="custom_url_scheme">nz.huntaccess.app</string>
+</resources>
