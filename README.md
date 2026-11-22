@@ -65,6 +65,10 @@ The app is a set of static files. It needs to be served over **https** for GPS a
 
 Netlify Drop (app.netlify.com/drop) also works: drag the folder in and you get an https link instantly.
 
+## Android app
+
+`app/` packages this web app as a native Android app with Capacitor. Each push to `main` builds a test APK, published under Releases. Service keys live in `config.js`. See `app/STORE-CHECKLIST.md` for the path to Google Play and the App Store.
+
 ## Before each trip
 
 1. Pan and zoom to the area you'll hunt (the whole screen is saved).
