@@ -61,13 +61,21 @@ async function snapToRoad(p) {
   const n = nearestOnLines(p, fc);
   return n && n.d < 400 ? { p: n.q, name: (n.f.properties || {}).full_road_name || '', d: n.d } : { p, name: '', d: null };
 }
+async function roadNear(dest) {
+  for (const d of [0.012, 0.03, 0.07]) {
+    const bb = [dest[0] - d * 1.4, dest[1] - d, dest[0] + d * 1.4, dest[1] + d];
+    const fc = await A.dataFor('rdl', bb).catch(() => EMPTY), n = nearestOnLines(dest, fc);
+    if (n) return { p: n.q, name: (n.f.properties || {}).full_road_name || '', d: n.d };
+  }
+  return null;
+}
 A.modeTap.walkCar = async p => {
   state.mode = null; toast('Finding the nearest public road…', 1500);
   const s = await snapToRoad(p); W.car = s.p; W.carName = s.name; W.res = null; drawAll();
   if (s.d == null) toast('No mapped public road within 400 m. Car stop left where you tapped: check it’s legal to park there.', 5000);
   sheet();
 };
-A.modeTap.walkDest = p => { state.mode = null; W.dest = p; W.res = null; drawAll(); sheet(); };
+A.modeTap.walkDest = p => { state.mode = null; W.dest = p; W.destName = ''; W.res = null; drawAll(); sheet(); };
 A.modeTap.walkVia = p => { state.mode = null; W.via.push(p); W.res = null; drawAll(); sheet(); };
 
 /* ---------- the router ---------- */
@@ -166,14 +174,14 @@ const fmtH = s => { const m = Math.round(s / 60); return m < 60 ? m + ' min' : M
 const ll = p => `${p[1].toFixed(5)}, ${p[0].toFixed(5)}`;
 function sheet(extra = '') {
   const r = W.res;
-  const rows = `<dl class="kv"><dt>Car stop</dt><dd>${W.car ? esc(W.carName || ll(W.car)) : '<i>not set</i>'}</dd>${W.via.map((v, i) => `<dt>Via ${i + 1}</dt><dd>${ll(v)}</dd>`).join('')}<dt>Destination</dt><dd>${W.dest ? ll(W.dest) : '<i>not set</i>'}</dd></dl>`;
+  const rows = `<dl class="kv"><dt>Car stop</dt><dd>${W.car ? esc(W.carName || ll(W.car)) : '<i>not set</i>'}</dd>${W.via.map((v, i) => `<dt>Via ${i + 1}</dt><dd>${ll(v)}</dd>`).join('')}<dt>Destination</dt><dd>${W.dest ? esc(W.destName || ll(W.dest)) : '<i>not set</i>'}</dd></dl>`;
   const res = r ? `<h3>Route</h3><dl class="kv"><dt>Distance</dt><dd>${fmtDist(r.dist)}</dd><dt>Climb</dt><dd>↑ ${Math.round(r.up)} m · ↓ ${Math.round(r.down)} m</dd><dt>Time</dt><dd>about ${fmtH(r.secs)} one way</dd>
       <dt>On tracks/roads</dt><dd>${fmtDist(r.trackM)}</dd><dt>Off track</dt><dd>${r.cover.slice(0, 3).map(([n, m]) => `${esc(n)} ${fmtDist(m)}`).join(', ') || '—'}</dd><dt>Streams</dt><dd>${r.streams} crossing${r.streams === 1 ? '' : 's'}</dd></dl>
       ${r.pr ? A.profileSvg(r.pr) : ''}
       ${r.privM > 20 ? `<p class="warnbox">${fmtDist(r.privM)} crosses private land (red on the map). Only use it with the landowner’s permission.</p>` : ''}
       ${r.steepM > 50 ? `<p class="warnbox">${fmtDist(r.steepM)} is steeper than 30° (amber on the map).</p>` : ''}
       ${r.streams ? '<p class="sub">Never cross a flooded river. Stream crossings assume normal flows.</p>' : ''}
-      <div class="btnrow"><button class="btn" data-act="walkFollow">Follow</button><button class="btn ghost" data-act="walkSave">Save route</button><button class="btn ghost" data-act="walkGpx">GPX</button></div>
+      <div class="btnrow"><button class="btn" data-act="walkFollow">Start: drive, then walk</button><button class="btn ghost" data-act="walkSave">Save route</button><button class="btn ghost" data-act="walkGpx">GPX</button></div>
       <div class="btnrow"><a class="btn ghost" href="https://maps.apple.com/directions?destination=${W.car[1]},${W.car[0]}&mode=driving" target="_blank" rel="noopener">Drive to car stop (Apple)</a><a class="btn ghost" href="https://www.google.com/maps/dir/?api=1&destination=${W.car[1]},${W.car[0]}&travelmode=driving" target="_blank" rel="noopener">(Google)</a></div>` : '';
   showSheet(`<h2>Walking route</h2><p class="sub">Set a car stop on a public road and a destination. The app finds the quickest walking line over the terrain, using tracks where they help and keeping to land you can legally cross.</p>
     ${rows}
@@ -214,11 +222,19 @@ let followTimer = null, warned = 0;
 function stopFollow() { clearInterval(followTimer); followTimer = null; }
 actions.walkFollow = () => {
   const r = W.res; if (!r) return;
-  setNav(W.destName || 'Destination', W.dest); stopFollow(); closeSheet();
-  toast('Following the route. You’ll get a warning if you stray more than 100 m from it.', 4000);
+  stopFollow(); closeSheet();
+  const me = state.me ? [state.me.lng, state.me.lat] : null;
+  let stage = me && distM(me, W.car) > 300 ? 'drive' : 'walk';
+  if (stage === 'drive') { setNav('Car stop' + (W.carName ? ' (' + W.carName + ')' : ''), W.car); toast('Arrow points to the car stop. Use “Drive to car stop” for road directions; it switches to the walk when you get there.', 5000); }
+  else { setNav(W.destName || 'Destination', W.dest); toast('Following the route. You’ll get a warning if you stray more than 100 m from it.', 4000); }
   followTimer = setInterval(() => {
     if (!state.me || !W.res) return;
-    const p = [state.me.lng, state.me.lat]; let best = Infinity;
+    const p = [state.me.lng, state.me.lat];
+    if (stage === 'drive') {
+      if (distM(p, W.car) < 150) { stage = 'walk'; setNav(W.destName || 'Destination', W.dest); toast('At the car stop. Now following the walking route.', 5000); if (navigator.vibrate) navigator.vibrate(300); }
+      return;
+    }
+    let best = Infinity;
     for (let i = 1; i < r.coords.length; i++) { const a = A.xy(r.coords[i - 1], p), b = A.xy(r.coords[i], p); best = Math.min(best, A.segDist([0, 0], a, b)[0]); }
     if (best > 100 && Date.now() - warned > 60000) { warned = Date.now(); toast(`Off route: ${fmtDist(best)} from the planned line`, 5000); if (navigator.vibrate) navigator.vibrate([200, 100, 200]); }
   }, 5000);
@@ -234,6 +250,16 @@ function simplify(pts, tol) {          // Douglas–Peucker in metres
   }
   return pts.filter((_, i) => keep[i]);
 }
+
+/* “Get me there”: car stop on the nearest public road to the destination, then plan the walk */
+A.getMeThere = async (dest, name) => {
+  ensureLayers(); W.dest = dest; W.destName = name || ''; W.via = []; W.res = null;
+  showSheet(`<h2>Getting you there…</h2><p class="sub">Finding the nearest public road to ${esc(name || 'the spot')}…</p>`, { kind: 'walk', mini: true });
+  const road = await roadNear(dest);
+  if (!road) { W.car = null; drawAll(); sheet('<p class="warnbox">No mapped public road found within about 7 km. Set the car stop yourself.</p>'); return; }
+  W.car = road.p; W.carName = road.name; drawAll();
+  await actions.walkGo();
+};
 
 /* entry points from other tools */
 A.walkTo = (dest, name, carHint) => { ensureLayers(); W.dest = dest; W.destName = name || ''; W.res = null; if (carHint && !W.car) { W.car = carHint.p; W.carName = carHint.name || ''; } drawAll(); sheet(); };

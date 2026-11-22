@@ -429,7 +429,7 @@ function resultSheet() {
     <p class="sub">${multi ? esc(names.join(', ')) + ' · ' : ''}${d.toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })} ${fmtTime(d)} · ${PERIOD_TXT[res.period]} · ${res.season}${rutLbl} · wind ${esc(cardinalTxt(res))}</p>
     ${warn.map(x => `<p class="warnbox">${esc(x)}</p>`).join('')}
     <h3>Top spots in view</h3>
-    <ul class="list">${res.spots.map((s, n) => { const rs = reasons(res, s); return `<li><span class="t">${n + 1}. ${multi ? esc(res.per[s.n].P.name) + ': ' : ''}${esc(rs[0])}</span> <span class="badge">${Math.round(100 * s.v)}</span><br><span class="sub">${esc(rs.slice(1, 3).join(' · '))}${me ? ` · ${fmtDist(distM(me, s.p))} ${compass(bearing(me, s.p))}` : ''}</span><div class="btnrow"><button class="btn small" data-act="findSpot" data-n="${n}">Details</button><button class="btn small ghost" data-act="findNav" data-n="${n}">Navigate</button></div></li>`; }).join('') || '<li class="sub">Nothing stood out. Try another time of day, or zoom out.</li>'}</ul>
+    <ul class="list">${res.spots.map((s, n) => { const rs = reasons(res, s); return `<li><span class="t">${n + 1}. ${multi ? esc(res.per[s.n].P.name) + ': ' : ''}${esc(rs[0])}</span> <span class="badge">${Math.round(100 * s.v)}</span><br><span class="sub">${esc(rs.slice(1, 3).join(' · '))}${me ? ` · ${fmtDist(distM(me, s.p))} ${compass(bearing(me, s.p))}` : ''}</span><div class="btnrow"><button class="btn small" data-act="findSpot" data-n="${n}">Details</button><button class="btn small ghost" data-act="findNav" data-n="${n}">Get me there</button></div></li>`; }).join('') || '<li class="sub">Nothing stood out. Try another time of day, or zoom out.</li>'}</ul>
     ${perHtml}
     <details><summary>Wind and thermals</summary><p class="sub">${esc(window.BEHAVIOUR_THERMALS || '')}</p></details>
     <div class="btnrow"><button class="btn ghost" data-act="mFind">Change</button><button class="btn ghost" data-act="findRerun">Re-run for this view</button><button class="btn ghost" data-act="findClear">Clear</button></div>
@@ -441,7 +441,7 @@ function spotSheet(n) {
   showSheet(`<h2>Spot ${n + 1}: ${esc(res.per[s.n].P.name)}</h2><p class="sub">${s.p[1].toFixed(5)}, ${s.p[0].toFixed(5)}${me ? ` · ${fmtDist(distM(me, s.p))} ${compass(bearing(me, s.p))} from you` : ''}</p>
     <h3>Why here</h3><ul class="sub">${reasons(res, s).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
     <h3>Approach</h3><ul class="sub">${approach(res, s).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-    <div class="btnrow"><button class="btn" data-act="findNav" data-n="${n}">Navigate</button><button class="btn ghost" data-act="walkTo" data-lng="${s.p[0]}" data-lat="${s.p[1]}" data-name="Likely spot ${n + 1}">Walking route</button><button class="btn ghost" data-act="saveWp" data-lng="${s.p[0]}" data-lat="${s.p[1]}">Save waypoint</button><button class="btn ghost" data-act="findBack">Back</button></div>
+    <div class="btnrow"><button class="btn" data-act="findNav" data-n="${n}">Get me there</button><button class="btn ghost" data-act="walkTo" data-lng="${s.p[0]}" data-lat="${s.p[1]}" data-name="Likely spot ${n + 1}">Walking route</button><button class="btn ghost" data-act="saveWp" data-lng="${s.p[0]}" data-lat="${s.p[1]}">Save waypoint</button><button class="btn ghost" data-act="findBack">Back</button></div>
     <p class="sub">Tap the map at the spot to check land status before you go.</p>`, { kind: 'find' });
   map.easeTo({ center: s.p, duration: 500 });
 }
@@ -488,7 +488,7 @@ actions.findShow = () => resultSheet();
 actions.findBack = () => resultSheet();
 actions.findClear = () => { clearFind(); closeSheet(); toast('Find animals overlay cleared'); };
 actions.findSpot = b => spotSheet(+b.dataset.n);
-actions.findNav = b => { const s = R && R.spots[+b.dataset.n]; if (s) { setNav('Likely spot ' + (+b.dataset.n + 1), s.p); toast('Navigating to spot ' + (+b.dataset.n + 1)); closeSheet(); } };
+actions.findNav = b => { const s = R && R.spots[+b.dataset.n]; if (!s) return; const name = 'Likely spot ' + (+b.dataset.n + 1); if (A.getMeThere) A.getMeThere(s.p, name); else { setNav(name, s.p); closeSheet(); } };
 actions.findFromHot = b => {
   const h = (window.HOTSPOTS || []).find(x => x.id === b.dataset.id); if (!h) return;
   const lats = h.pts.map(p => p[0]), lngs = h.pts.map(p => p[1]);
