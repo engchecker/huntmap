@@ -7,7 +7,7 @@ android {
         applicationId "nz.huntaccess.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (project.findProperty("versionCode") ?: "1").toString().toInteger()
+        versionCode = Integer.parseInt((project.findProperty("versionCode") ?: "1").toString())
         versionName "2.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
