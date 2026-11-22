@@ -125,7 +125,7 @@ async function loadVector(G, prog) {
   const tx0 = Math.floor(G.x0 * k / TS), tx1 = Math.floor((G.x0 + G.W * G.s - 1) * k / TS), ty0 = Math.floor(G.y0 * k / TS), ty1 = Math.floor((G.y0 + G.H * G.s - 1) * k / TS);
   const tiles = []; for (let x = tx0; x <= tx1; x++) for (let y = ty0; y <= ty1; y++) tiles.push([x, y]);
   const cv = () => { const c = mkCanvas(G.W, G.H), g = c.getContext('2d', { willReadFrequently: true }); return { c, g }; };
-  const C = { veg: cv(), water: cv(), road: cv(), track: cv(), slip: cv(), cliff: cv() };
+  const C = { veg: cv(), water: cv(), road: cv(), bldg: cv(), track: cv(), slip: cv(), cliff: cv() };
   C.veg.g.fillStyle = 'rgb(10,0,0)'; C.veg.g.fillRect(0, 0, G.W, G.H);
   const groups = {}; VEG.forEach(v => { groups[v] = []; });
   const lines = { water: [], road: [], track: [], slip: [], cliff: [] }, polysDist = [];
@@ -160,11 +160,11 @@ async function loadVector(G, prog) {
   for (const v of ['scatter', 'scrub', 'exotic', 'native', 'swamp', 'rock', 'sand', 'ice', 'water']) { C.veg.g.fillStyle = `rgb(${10 + VEG.indexOf(v) * 25},0,0)`; groups[v].forEach(r => fill(C.veg.g, r)); }
   for (const [k2, arr] of Object.entries(lines)) { const g = C[k2].g; g.strokeStyle = '#fff'; g.lineWidth = 1.2; arr.forEach(r => stroke(g, r)); }
   C.water.g.fillStyle = '#fff'; groups.water.forEach(r => fill(C.water.g, r));
-  C.road.g.fillStyle = '#fff'; polysDist.forEach(r => fill(C.road.g, r));
+  C.bldg.g.fillStyle = '#fff'; polysDist.forEach(r => fill(C.bldg.g, r));
   const N = G.W * G.H, veg = new Uint8Array(N), rd = C.veg.g.getImageData(0, 0, G.W, G.H).data;
   for (let i = 0; i < N; i++) veg[i] = clamp(Math.round((rd[i * 4] - 10) / 25), 0, 9);
   const mask = k2 => { const d = C[k2].g.getImageData(0, 0, G.W, G.H).data, m = new Uint8Array(N); for (let i = 0; i < N; i++) m[i] = d[i * 4 + 3] > 60 ? 1 : 0; return m; };
-  return { veg, water: mask('water'), road: mask('road'), track: mask('track'), slip: mask('slip'), cliff: mask('cliff') };
+  return { veg, water: mask('water'), road: mask('road'), bldg: mask('bldg'), track: mask('track'), slip: mask('slip'), cliff: mask('cliff') };
 }
 function rasterFC(G, fcs, keep) {
   const g = mkCanvas(G.W, G.H).getContext('2d', { willReadFrequently: true });
@@ -222,7 +222,7 @@ async function prepare(G, prog) {
     const k = j * G.W + i, a = V.veg[k];
     for (const n of [i > 0 ? k - 1 : -1, i < G.W - 1 ? k + 1 : -1, j > 0 ? k - G.W : -1, j < G.H - 1 ? k + G.W : -1]) if (n >= 0 && ((cover(a) && openish(V.veg[n])) || (openish(a) && cover(V.veg[n])))) { edgeM[k] = 1; break; }
   }
-  const D = { water: chamfer(V.water, G.W, G.H, cm), edge: chamfer(edgeM, G.W, G.H, cm), road: chamfer(V.road, G.W, G.H, cm), track: chamfer(V.track, G.W, G.H, cm), slip: chamfer(V.slip, G.W, G.H, cm), cliff: chamfer(V.cliff, G.W, G.H, cm) };
+  const D = { water: chamfer(V.water, G.W, G.H, cm), edge: chamfer(edgeM, G.W, G.H, cm), road: chamfer(V.road.map((v, i) => v | V.bldg[i]), G.W, G.H, cm), track: chamfer(V.track, G.W, G.H, cm), slip: chamfer(V.slip, G.W, G.H, cm), cliff: chamfer(V.cliff, G.W, G.H, cm) };
   const hasEdge = edgeM.some(Boolean), hasWater = V.water.some(Boolean);
   return { E, V, slope, aspect, tpi, epos, D, hasEdge, hasWater };
 }
@@ -441,7 +441,7 @@ function spotSheet(n) {
   showSheet(`<h2>Spot ${n + 1}: ${esc(res.per[s.n].P.name)}</h2><p class="sub">${s.p[1].toFixed(5)}, ${s.p[0].toFixed(5)}${me ? ` · ${fmtDist(distM(me, s.p))} ${compass(bearing(me, s.p))} from you` : ''}</p>
     <h3>Why here</h3><ul class="sub">${reasons(res, s).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
     <h3>Approach</h3><ul class="sub">${approach(res, s).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-    <div class="btnrow"><button class="btn" data-act="findNav" data-n="${n}">Navigate</button><button class="btn ghost" data-act="saveWp" data-lng="${s.p[0]}" data-lat="${s.p[1]}">Save waypoint</button><button class="btn ghost" data-act="findBack">Back</button></div>
+    <div class="btnrow"><button class="btn" data-act="findNav" data-n="${n}">Navigate</button><button class="btn ghost" data-act="walkTo" data-lng="${s.p[0]}" data-lat="${s.p[1]}" data-name="Likely spot ${n + 1}">Walking route</button><button class="btn ghost" data-act="saveWp" data-lng="${s.p[0]}" data-lat="${s.p[1]}">Save waypoint</button><button class="btn ghost" data-act="findBack">Back</button></div>
     <p class="sub">Tap the map at the spot to check land status before you go.</p>`, { kind: 'find' });
   map.easeTo({ center: s.p, duration: 500 });
 }
@@ -498,5 +498,12 @@ actions.findFromHot = b => {
   let shown = false; const open = () => { if (!shown) { shown = true; findSheet(sp ? { sps: [sp[0]] } : {}); } };
   map.once('idle', open); setTimeout(open, 2500);
 };
-A.model = { run, findSpots, thumb, reasons: (res, s) => reasons(res, s), approach: (res, s) => approach(res, s), get result() { return R; } };
+// terrain/cover grids for any area (used by the walking-route planner)
+async function terrain(bbox, prog = () => {}) {
+  const G = gridFor(bbox); await A.loadAreas(G.bbox);
+  const key = [G.x0, G.y0, G.s, G.W, G.H, Math.floor(Date.now() / 18e5)].join();
+  if (!prepCache || prepCache.key !== key) prepCache = { key, ...(await prepare(G, prog)) };
+  return { G, ...prepCache };
+}
+A.model = { run, terrain, raster: rasterFC, findSpots, thumb, reasons: (res, s) => reasons(res, s), approach: (res, s) => approach(res, s), get result() { return R; } };
 })();

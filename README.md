@@ -105,6 +105,7 @@ No build step: plain files served as they are.
 | `model.js` | Find animals habitat model (uses `window.HuntMap`, the app's small internal API) |
 | `behaviour.js` | Species behaviour profiles used by the model |
 | `trip.js` | Plan a trip here: one-tap trip report (land, access, effort, animals, heatmaps by time of day, weather, hazards, logistics) |
+| `route.js` | Walking route planner: car stop on a public road → via points → destination; least-cost route over terrain, cover, streams, bluffs and legal access (Tobler hiking function) |
 | `rules.js` | Rules, seasons & ballots reference sheet (dated; check sources) |
 | `hotspots.js`, `data.js` | Public-land hotspots, access directory and species list |
 | `sw.js` | Service worker: app files network-first with offline fallback; map tiles cache-first |

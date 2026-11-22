@@ -117,7 +117,9 @@ async function build(p, o, prog) {
   prog('Finding roads, tracks, access routes, huts and hazards…');
   const ids = ['rdl', 'tracks', 'huts', 'camps', 'road', 'marg', 'ease', 'res', 'parks', 'other', 'hunt', 'pcl', 'addr', 'pestWill', 'pestHave'];
   const fcs = {};
-  await Promise.all(ids.map(async id => { try { fcs[id] = await A.dataFor(id, ['rdl', 'tracks', 'road', 'ease', 'marg'].includes(id) ? wide : bb); } catch { fcs[id] = { features: [] }; } }));
+  const limit = (pr, ms) => Promise.race([pr, new Promise(r => setTimeout(() => r(null), ms))]);
+  const slow = [];
+  await Promise.all(ids.map(async id => { let fc = null; try { fc = await limit(A.dataFor(id, ['rdl', 'tracks', 'road', 'ease', 'marg'].includes(id) ? wide : bb), 25000); } catch {} if (!fc) slow.push(id); fcs[id] = fc || { features: [] }; }));
   // legal ways in
   const paper = { features: fcs.road.features.filter(f => (f.properties || {}).paa_type === 'Unformed Legal Road Parcel') };
   const pae = { features: fcs.ease.features.filter(f => (f.properties || {}).paa_type === 'PAE Easement') };
@@ -133,7 +135,7 @@ async function build(p, o, prog) {
   let walk = null;
   if (start && start.d > 30) {
     prog('Working out the climb from the nearest road…');
-    const pr = await A.profileOf([start.q, p]).catch(() => null);
+    const pr = await limit(A.profileOf([start.q, p]).catch(() => null), 20000);
     walk = { from: start, pr, share: publicShare(start.q, p, fcs) };
   }
   // likely spots by time of day (first day)
@@ -159,7 +161,7 @@ async function build(p, o, prog) {
   const pests = [...fcs.pestWill.features, ...fcs.pestHave.features].map(f => f.properties || {});
   const wps = (state.wps || []).filter(w => distM(p, [w.lng, w.lat]) < o.rKm * 1000 * 1.5);
   const hots = (window.HOTSPOTS || []).map(h => ({ h, d: Math.min(...h.pts.map(q => distM(p, [q[1], q[0]]))) })).filter(x => x.d < 30000).sort((a, b) => a.d - b.d).slice(0, 3);
-  return { p, o, land, verdict, wx, access, walk, runs, near, site, pests, wps, hots, made: new Date() };
+  return { p, o, land, verdict, wx, access, walk, runs, near, site, pests, wps, hots, slow, made: new Date() };
 }
 
 /* ---------- report ---------- */
@@ -194,6 +196,7 @@ function reportHtml(R) {
   const [E, N] = A.llToNZTM(p[0], p[1]);
   const kv = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '';
   return `<header class="rp-head"><h1>Trip report</h1><p class="sub">${p[1].toFixed(5)}, ${p[0].toFixed(5)} · NZTM ${Math.round(E)} E ${Math.round(N)} N<br>${fmtDay(o.d0)}${+o.d1 !== +o.d0 ? ' – ' + fmtDay(o.d1) : ''} · ${o.sps.map(spLabel).map(esc).join(', ')} · made ${R.made.toLocaleString('en-NZ', { dateStyle: 'medium', timeStyle: 'short' })}</p></header>
+  ${R.slow && R.slow.length ? `<p class="warnbox">Some data didn’t load in time (${R.slow.length} source${R.slow.length > 1 ? 's' : ''}), so parts of this report may be incomplete. Rebuild it with a better signal.</p>` : ''}
   <section><h2>Land and permits</h2><div class="verdict ${'v-' + verdict.cat}"><div><b>${esc(verdict.title)}</b><span>${esc(verdict.text)}</span></div></div>
     ${h0 ? `<dl class="kv">${kv('Block', esc(h0.HuntBlockName))}${kv('Permit area', esc(h0.PermitArea))}${kv('Type', esc([h0.BlockType, h0.HuntStatus].filter(Boolean).join(' · ')))}${kv('Dates', esc(h0.DateConditions))}${kv('Access', esc(h0.AccessConditions))}${kv('Dogs', esc(h0.DogConditions))}${kv('Special', esc(h0.SpecialConditions))}</dl>
       <p class="sub">${h0.HuntStatus === 'Permitted' ? `Get a free DOC open hunting permit: <a href="${A.LINKS.docPermit}" target="_blank" rel="noopener">permits</a>. ` : ''}${h0.HuntingWebPage ? `<a href="${esc(h0.HuntingWebPage)}" target="_blank" rel="noopener">Block page and rules</a>.` : ''}</p>` : ''}
@@ -229,7 +232,7 @@ function textSummary(R) {
 function openReport(R) {
   let el = $('#report');
   if (!el) { el = document.createElement('div'); el.id = 'report'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Trip report'); document.body.appendChild(el); }
-  el.innerHTML = `<div class="rp-bar"><button class="btn small ghost" data-rp="close">Close</button><button class="btn small" data-rp="print">Save PDF / print</button><button class="btn small ghost" data-rp="share">Share</button><button class="btn small ghost" data-rp="wp">Save spot</button><button class="btn small ghost" data-rp="intent">Trip intentions</button></div><div class="rp-body">${reportHtml(R)}</div>`;
+  el.innerHTML = `<div class="rp-bar"><button class="btn small ghost" data-rp="close">Close</button><button class="btn small" data-rp="print">Save PDF / print</button><button class="btn small ghost" data-rp="share">Share</button><button class="btn small ghost" data-rp="wp">Save spot</button><button class="btn small ghost" data-rp="walk">Walking route</button><button class="btn small ghost" data-rp="intent">Trip intentions</button></div><div class="rp-body">${reportHtml(R)}</div>`;
   el.hidden = false; el.scrollTop = 0;
   el.onclick = async e => {
     const b = e.target.closest('[data-rp]'); if (!b) return;
@@ -237,6 +240,7 @@ function openReport(R) {
     if (k === 'close') el.hidden = true;
     if (k === 'print') window.print();
     if (k === 'share') { const text = textSummary(R); if (navigator.share) { try { await navigator.share({ title: 'Trip report', text }); return; } catch {} } try { await navigator.clipboard.writeText(text); toast('Summary copied'); } catch { toast('Couldn’t share'); } }
+    if (k === 'walk') { el.hidden = true; if (A.walkTo) A.walkTo(R.p, 'Trip spot', R.walk && R.walk.from.kind === 'Formed road' ? { p: R.walk.from.q, name: R.walk.from.name } : null); return; }
     if (k === 'wp') { el.hidden = true; actions.saveWp({ dataset: { lng: R.p[0], lat: R.p[1] } }); }
     if (k === 'intent') {
       const t = LS.get('trip', {}), s = sunTimes(R.o.d0, R.p[1], R.p[0]);
