@@ -92,8 +92,9 @@ const trap = (v, t) => v <= t[0] || v >= t[3] ? 0 : v < t[1] ? (v - t[0]) / (t[1
 async function pool(items, n, fn) { let i = 0; await Promise.all(Array.from({ length: n }, async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } })); }
 
 /* ---------- inputs ---------- */
-function gridFor() {
-  const b = map.getBounds(); let x0 = lng2w(b.getWest()), x1 = lng2w(b.getEast()), y0 = lat2w(b.getNorth()), y1 = lat2w(b.getSouth());
+function gridFor(bb) {
+  const b = bb ? { getWest: () => bb[0], getSouth: () => bb[1], getEast: () => bb[2], getNorth: () => bb[3] } : map.getBounds();
+  let x0 = lng2w(b.getWest()), x1 = lng2w(b.getEast()), y0 = lat2w(b.getNorth()), y1 = lat2w(b.getSouth());
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, crop = (x1 - x0 > MAXPX || y1 - y0 > MAXPX);
   if (x1 - x0 > MAXPX) { x0 = cx - MAXPX / 2; x1 = cx + MAXPX / 2; }
   if (y1 - y0 > MAXPX) { y0 = cy - MAXPX / 2; y1 = cy + MAXPX / 2; }
@@ -194,13 +195,11 @@ async function windFor(p, t, mode) {
 }
 
 /* ---------- the model ---------- */
-async function run(opt, prog) {
-  const sps = (opt.sps || []).filter(k => B[k]); if (!sps.length) throw new Error('species');
-  const G = gridFor(), N = G.W * G.H, c = G.centre;
-  const t = timeFor(opt.when, opt.date, c[1], c[0]), season = seasonOf(t), period = periodOf(t, c[1], c[0]);
-  await A.loadAreas(G.bbox);
-  prog(0.02, 'Checking the wind…');
-  const wind = await windFor(c, t, opt.wind);
+/* Terrain, cover and distance grids for an area. Expensive, so the last one is kept: re-scoring the same
+   area for another time of day or species reuses it. */
+let prepCache = null;
+async function prepare(G, prog) {
+  const N = G.W * G.H;
   const E = await loadDem(G, prog);
   if (E.every(v => !Number.isFinite(v))) throw new Error('terrain');
   const V = await loadVector(G, prog);
@@ -216,15 +215,6 @@ async function run(opt, prog) {
   const tpiRaw = new Float32Array(N); for (let i = 0; i < N; i++) tpiRaw[i] = Ef[i] - mean[i];
   const tsd = Math.max(5, Math.sqrt(tpiRaw.reduce((a, v) => a + v * v, 0) / N)), tpi = tpiRaw.map(v => clamp(v / (1.5 * tsd), -1, 1));
   const lo = pct(E, 0.05), hi = Math.max(pct(E, 0.95), lo + 1), epos = E.map(v => clamp((v - lo) / (hi - lo), 0, 1));
-  // sun: seasonal warmth (noon sun from the north) + sun on the face at the chosen time
-  const stt = sunTimes(t, c[1], c[0]), noonT = stt ? new Date((stt.rise.getTime() + stt.set.getTime()) / 2) : t;
-  const noon = sunPos(noonT, c[1], c[0]), now = sunPos(t, c[1], c[0]);
-  // warmth index: how squarely a face points at the sun (noon sun for the season; current sun when it's up), scaled by steepness
-  const warm = new Float32Array(N);
-  for (let k = 0; k < N; k++) {
-    const st = Math.min(1, slope[k] / 20), a = Math.cos((aspect[k] - noon.az) * rad) * st;
-    warm[k] = now.alt > 2 ? 0.6 * a + 0.4 * Math.cos((aspect[k] - now.az) * rad) * st : a;
-  }
   prog(0.78, 'Measuring distance to water, cover and tracks…');
   const cover = v => v === 2 || v === 3 || v === 4, openish = v => v === 0 || v === 1 || v === 5 || v === 6 || v === 9;
   const edgeM = new Uint8Array(N);
@@ -234,6 +224,27 @@ async function run(opt, prog) {
   }
   const D = { water: chamfer(V.water, G.W, G.H, cm), edge: chamfer(edgeM, G.W, G.H, cm), road: chamfer(V.road, G.W, G.H, cm), track: chamfer(V.track, G.W, G.H, cm), slip: chamfer(V.slip, G.W, G.H, cm), cliff: chamfer(V.cliff, G.W, G.H, cm) };
   const hasEdge = edgeM.some(Boolean), hasWater = V.water.some(Boolean);
+  return { E, V, slope, aspect, tpi, epos, D, hasEdge, hasWater };
+}
+async function run(opt, prog) {
+  const sps = (opt.sps || []).filter(k => B[k]); if (!sps.length) throw new Error('species');
+  const G = gridFor(opt.bbox), N = G.W * G.H, c = G.centre;
+  const t = opt.at ? new Date(opt.at) : timeFor(opt.when, opt.date, c[1], c[0]), season = seasonOf(t), period = periodOf(t, c[1], c[0]);
+  await A.loadAreas(G.bbox);
+  prog(0.02, 'Checking the wind…');
+  const wind = await windFor(c, t, opt.wind);
+  const key = [G.x0, G.y0, G.s, G.W, G.H, Math.floor(Date.now() / 18e5)].join();
+  if (!prepCache || prepCache.key !== key) prepCache = { key, ...(await prepare(G, prog)) };
+  const { E, V, slope, aspect, tpi, epos, D, hasEdge, hasWater } = prepCache, cm = G.cellM;
+  // sun: seasonal warmth (noon sun from the north) + sun on the face at the chosen time
+  const stt = sunTimes(t, c[1], c[0]), noonT = stt ? new Date((stt.rise.getTime() + stt.set.getTime()) / 2) : t;
+  const noon = sunPos(noonT, c[1], c[0]), now = sunPos(t, c[1], c[0]);
+  // warmth index: how squarely a face points at the sun (noon sun for the season; current sun when it's up), scaled by steepness
+  const warm = new Float32Array(N);
+  for (let k = 0; k < N; k++) {
+    const st = Math.min(1, slope[k] / 20), a = Math.cos((aspect[k] - noon.az) * rad) * st;
+    warm[k] = now.alt > 2 ? 0.6 * a + 0.4 * Math.cos((aspect[k] - now.az) * rad) * st : a;
+  }
   // masks: DOC hunting areas and DOC distribution data
   const hf = fcsFor('hunt', G.bbox), hm = rasterFC(G, hf.fcs, p => p.HuntStatus !== 'Prohibited');
   prog(0.85, 'Scoring habitat…');
@@ -299,22 +310,11 @@ async function run(opt, prog) {
 
 /* ---------- output ---------- */
 let R = null, markers = [];
-function draw(res) {
-  const { G, score } = res, N = G.W * G.H, vals = Array.from(score).filter(v => v > 0);
-  const p60 = pct(vals, 0.6), p98 = Math.max(pct(vals, 0.985), p60 + 1e-3);
-  const c = mkCanvas(G.W, G.H), g = c.getContext('2d'), img = g.createImageData(G.W, G.H), o = img.data;
-  for (let k = 0; k < N; k++) {
-    const v = (score[k] - p60) / (p98 - p60); if (!(v > 0)) continue; const x = Math.min(1, v);
-    o[k * 4] = 255; o[k * 4 + 1] = Math.round(225 - 190 * x); o[k * 4 + 2] = Math.round(70 - 50 * x); o[k * 4 + 3] = Math.round(60 + 150 * x);
-  }
-  g.putImageData(img, 0, 0);
-  const url = c.toDataURL ? c.toDataURL() : null;
-  const finish = u => {
-    const coords = [[w2lng(G.x0), w2lat(G.y0)], [w2lng(G.x0 + G.W * G.s), w2lat(G.y0)], [w2lng(G.x0 + G.W * G.s), w2lat(G.y0 + G.H * G.s)], [w2lng(G.x0), w2lat(G.y0 + G.H * G.s)]];
-    res.img = { url: u, coords }; addLayer();
-  };
-  if (url) finish(url); else c.convertToBlob({ type: 'image/png' }).then(b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); })).then(finish);
-  // top spots: local maxima at least ~400 m apart
+const scale = score => { const vals = Array.from(score).filter(v => v > 0); const p60 = pct(vals, 0.6); return { p60, p98: Math.max(pct(vals, 0.985), p60 + 1e-3) }; };
+const heatRGBA = (o, k, x) => { o[k * 4] = 255; o[k * 4 + 1] = Math.round(225 - 190 * x); o[k * 4 + 2] = Math.round(70 - 50 * x); o[k * 4 + 3] = Math.round(60 + 150 * x); };
+// top spots: local maxima at least ~400 m apart (max n)
+function findSpots(res, n = 6) {
+  const { G, score } = res, N = G.W * G.H, { p60 } = scale(score);
   const sm = boxMean(score, G.W, G.H, 1), order = [];
   for (let k = 0; k < N; k++) if (sm[k] > p60) order.push(k);
   order.sort((a, b) => sm[b] - sm[a]);
@@ -324,9 +324,43 @@ function draw(res) {
     if (i < 2 || j < 2 || i > G.W - 3 || j > G.H - 3) continue;
     if (spots.some(s => Math.hypot(s.i - i, s.j - j) * G.cellM < sep)) continue;
     spots.push({ i, j, k, n: res.owner[k], p: [w2lng(G.x0 + (i + 0.5) * G.s), w2lat(G.y0 + (j + 0.5) * G.s)], v: sm[k] / top });
-    if (spots.length >= 6) break;
+    if (spots.length >= n) break;
   }
-  res.spots = spots; drawMarkers();
+  return spots;
+}
+function draw(res) {
+  const { G, score } = res, N = G.W * G.H, { p60, p98 } = scale(score);
+  const c = mkCanvas(G.W, G.H), g = c.getContext('2d'), img = g.createImageData(G.W, G.H), o = img.data;
+  for (let k = 0; k < N; k++) { const v = (score[k] - p60) / (p98 - p60); if (v > 0) heatRGBA(o, k, Math.min(1, v)); }
+  g.putImageData(img, 0, 0);
+  toURL(c).then(u => {
+    const coords = [[w2lng(G.x0), w2lat(G.y0)], [w2lng(G.x0 + G.W * G.s), w2lat(G.y0)], [w2lng(G.x0 + G.W * G.s), w2lat(G.y0 + G.H * G.s)], [w2lng(G.x0), w2lat(G.y0 + G.H * G.s)]];
+    res.img = { url: u, coords }; addLayer();
+  });
+  res.spots = findSpots(res); drawMarkers();
+}
+const toURL = c => c.toDataURL ? Promise.resolve(c.toDataURL('image/png')) : c.convertToBlob({ type: 'image/png' }).then(b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); }));
+/* Stand-alone picture of a result for reports: shaded relief from the DEM, water and tracks, the heat shading,
+   numbered top spots and an optional target point. Returns a PNG data URL. */
+async function thumb(res, { target = null, spots = 4, size = 360 } = {}) {
+  const { G, score, slope, aspect } = res, N = G.W * G.H, V = prepCache && prepCache.V, { p60, p98 } = scale(score);
+  const c = mkCanvas(G.W, G.H), g = c.getContext('2d'), img = g.createImageData(G.W, G.H), o = img.data;
+  for (let k = 0; k < N; k++) {
+    const sh = 0.5 + 0.5 * Math.cos((aspect[k] - 315) * rad) * Math.sin(Math.min(60, slope[k]) * rad * 1.5);   // light from the NW
+    let r = 200 * sh + 40, gg = 205 * sh + 40, b = 190 * sh + 40;
+    if (V && V.water[k]) { r = 90; gg = 160; b = 230; } else if (V && (V.track[k] || V.road[k])) { r = 70; gg = 60; b = 50; }
+    const v = (score[k] - p60) / (p98 - p60);
+    if (v > 0) { const x = Math.min(1, v), a = 0.25 + 0.6 * x; r = r * (1 - a) + 255 * a; gg = gg * (1 - a) + (225 - 190 * x) * a; b = b * (1 - a) + (70 - 50 * x) * a; }
+    o[k * 4] = r; o[k * 4 + 1] = gg; o[k * 4 + 2] = b; o[k * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const sc = size / Math.max(G.W, G.H), out = mkCanvas(Math.round(G.W * sc), Math.round(G.H * sc)), og = out.getContext('2d');
+  og.imageSmoothingEnabled = true; og.drawImage(c, 0, 0, out.width, out.height);
+  const px = p => [(lng2w(p[0]) - G.x0) / G.s * sc, (lat2w(p[1]) - G.y0) / G.s * sc];
+  og.font = 'bold 13px system-ui,sans-serif'; og.textAlign = 'center'; og.textBaseline = 'middle';
+  findSpots(res, spots).forEach((s, i) => { const [x, y] = px(s.p); og.fillStyle = '#b91c1c'; og.strokeStyle = '#fff'; og.lineWidth = 2; og.beginPath(); og.arc(x, y, 10, 0, 7); og.fill(); og.stroke(); og.fillStyle = '#fff'; og.fillText(String(i + 1), x, y + 0.5); });
+  if (target) { const [x, y] = px(target); og.strokeStyle = '#111'; og.lineWidth = 3; og.beginPath(); og.moveTo(x - 9, y); og.lineTo(x + 9, y); og.moveTo(x, y - 9); og.lineTo(x, y + 9); og.stroke(); og.strokeStyle = '#ff6a13'; og.lineWidth = 2; og.beginPath(); og.arc(x, y, 7, 0, 7); og.stroke(); }
+  return toURL(out);
 }
 function addLayer() {
   if (!R || !R.img) return;
@@ -464,5 +498,5 @@ actions.findFromHot = b => {
   let shown = false; const open = () => { if (!shown) { shown = true; findSheet(sp ? { sps: [sp[0]] } : {}); } };
   map.once('idle', open); setTimeout(open, 2500);
 };
-A.model = { run, get result() { return R; } };
+A.model = { run, findSpots, thumb, reasons: (res, s) => reasons(res, s), approach: (res, s) => approach(res, s), get result() { return R; } };
 })();

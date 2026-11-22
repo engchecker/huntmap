@@ -131,3 +131,25 @@ select option{background:var(--card);color:var(--cardInk)}
 .spgrid{display:grid;grid-template-columns:1fr 1fr;column-gap:12px;margin:4px 0 10px}
 .spgrid .toggle{padding:8px 0}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* Trip report */
+#report{position:fixed;inset:0;z-index:20;background:var(--card);color:var(--cardInk);overflow:auto;-webkit-overflow-scrolling:touch}
+#report[hidden]{display:none}
+.rp-bar{position:sticky;top:0;z-index:1;display:flex;flex-wrap:wrap;gap:6px;padding:calc(var(--safeT) + 8px) 12px 8px;background:var(--card);border-bottom:1px solid var(--sep)}
+.rp-body{padding:12px 16px calc(var(--safeB) + 24px);max-width:760px;margin:0 auto}
+.rp-body h1{font-size:22px;margin:4px 0}
+.rp-body h2{font-size:18px;margin:18px 0 6px;padding-top:10px;border-top:1px solid var(--sep)}
+.rp-body h3{font-size:15px;margin:12px 0 4px}
+.rp-img{width:100%;max-width:420px;display:block;border-radius:10px;border:1px solid var(--sep)}
+.rp-body ol{padding-left:20px}
+.rp-body li.warn{color:#b91c1c}
+@media print{
+  html,body{height:auto;overflow:visible;background:#fff}
+  body>*:not(#report){display:none!important}
+  #report{position:static;overflow:visible;background:#fff;color:#111}
+  .rp-bar{display:none}
+  .rp-body{max-width:none;padding:0}
+  .rp-run,section{break-inside:avoid-page}
+  .rp-img{max-width:300px}
+  a{color:#111}
+}

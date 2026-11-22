@@ -743,6 +743,7 @@ function renderIdentify(p, r) {
     h += `<h3>Property</h3><div id="parcelBox"><div class="btnrow"><button class="btn" data-act="parcelInfo">More info: lot, DP &amp; title</button></div><p class="sub">Looks up the land parcel separately. This can be slow in the hills.</p></div>`;
   }
 
+  h += `<div class="btnrow"><button class="btn" data-act="tripPlan" data-lng="${p[0]}" data-lat="${p[1]}">Plan a trip here</button></div>`;
   h += `<h3>Go there</h3><div class="btnrow">
     <a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${p[1]},${p[0]}" target="_blank" rel="noopener">Drive (Google)</a>
     <a class="btn ghost" href="https://maps.apple.com/?daddr=${p[1]},${p[0]}" target="_blank" rel="noopener">Apple Maps</a>
@@ -1184,6 +1185,7 @@ $('#btnOffline').onclick = () => (sheetKind === 'offline' && !sheet.hidden ? clo
 /* ---------------- menu & settings ---------------- */
 function menuSheet() {
   showSheet(`<h2>Tools</h2><div class="menu">
+    <button data-act="tripLast"><span>🗒</span><span>Trip report<small>Tap the map, then “Plan a trip here”. Opens your last report</small></span></button>
     <button data-act="mRules"><span>📋</span><span>Rules, seasons &amp; ballots<small>Key dates, permits, firearms law, poisons, meat safety</small></span></button>
     <button data-act="mFind"><span>🔎</span><span>Find animals<small>Likely spots from behaviour, terrain, cover, sun and wind</small></span></button>
     <button data-act="mArc"><span>🎯</span><span>Shooting arc check<small>What’s in your line of fire</small></span></button>
@@ -1218,7 +1220,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.8.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.9 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -1914,7 +1916,8 @@ actions.mArc = () => arcSheet();
 actions.mTrack = trackSheet;
 
 /* internals for the habitat model (model.js) */
-window.HuntMap = { loadAreas: bb => areaStore.load(bb), classify, llToNZTM, nztmToLL, map, state, actions, LS, showSheet, closeSheet, toast, demTile, sunTimes, BM, distM, bearing, compass, fmtDist, fmtTime, fmtDate, esc, fetchT, online, SPECIES, setNav, setTarget, getWind: () => lastWind, setWind: w => { lastWind = w; }, resolveStyle, mkCanvas };
+window.HuntMap = { loadAreas: bb => areaStore.load(bb), classify, llToNZTM, nztmToLL, dataFor, nearestEdge, xy, segDist, featContains, profileOf, profileSvg, walkTime, fmtDur, pickName, LINKS, uid, DB, confirmDlg,
+  landAt: async p => { if (state.areas.length) await areaStore.load([p[0], p[1], p[0], p[1]]); const local = identifyLocal(p); if (!online()) return local; try { return mergeLocal(await identifyOnline(p), local); } catch { return local; } }, map, state, actions, LS, showSheet, closeSheet, toast, demTile, sunTimes, BM, distM, bearing, compass, fmtDist, fmtTime, fmtDate, esc, fetchT, online, SPECIES, setNav, setTarget, getWind: () => lastWind, setWind: w => { lastWind = w; }, resolveStyle, mkCanvas };
 
 /* ---------------- start-up ---------------- */
 (async () => {

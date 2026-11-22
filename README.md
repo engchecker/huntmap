@@ -104,6 +104,7 @@ No build step: plain files served as they are.
 | `app.js` | The app: map, land data loading, identify, layers, GPS, offline areas, field tools. Sections are listed at the top of the file |
 | `model.js` | Find animals habitat model (uses `window.HuntMap`, the app's small internal API) |
 | `behaviour.js` | Species behaviour profiles used by the model |
+| `trip.js` | Plan a trip here: one-tap trip report (land, access, effort, animals, heatmaps by time of day, weather, hazards, logistics) |
 | `rules.js` | Rules, seasons & ballots reference sheet (dated; check sources) |
 | `hotspots.js`, `data.js` | Public-land hotspots, access directory and species list |
 | `sw.js` | Service worker: app files network-first with offline fallback; map tiles cache-first |
