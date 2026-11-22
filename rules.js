@@ -43,6 +43,7 @@ const SEASONS = [
   ['Tahr', 'Late May to mid-Jul; manes May–Aug', 'Central Southern Alps feral range', '.222+ on DOC land'],
   ['Chamois', 'May–Jun; best skins May–Sep', 'South Island high country & West Coast', '.223 <200 m or .243+'],
   ['Pigs, goats', 'Year-round', 'Widespread', '.222+ on DOC land'],
+  ['Feral sheep', 'Year-round; breeding peaks Jun–Jul', 'Waianakarua (DOC); Mohaka/Ngaruroro; mostly private; Arapawa, Chatham, Pitt guided only', '.243+ (thick fleece)'],
   ['Wallabies', 'Year-round; spring flush, winter sun', 'Hunter Hills/Kirkliston (Bennett’s); Rotorua lakes (dama, parma)', '.222/.243 (DOC)']
 ];
 const POISON = [
@@ -61,6 +62,7 @@ function rulesSheet() {
     ${sec('Which permit do I need?', `<ul class="sub">
       <li><b>DOC open hunting permit:</b> free, online, 12 months, any regions you pick. Covers deer, pigs, goats, chamois, tahr and wallabies on open DOC land. ${link(L.permit, 'Get it')}</li>
       <li><b>Restricted or ballot blocks:</b> a separate DOC permit or ballot (above).</li>
+      <li><b>Feral sheep on DOC land:</b> a permit from the DOC office nearest the population; the online system doesn’t cover them. Most populations are on private land, and island sheep are guided only. NZDA trophy minimum: 70 Douglas Score.</li>
       <li><b>Rabbits and hares on DOC land:</b> a small-game permit, only in some regions. <b>Possums:</b> a possum permit from the local DOC office. The open permit doesn’t cover them.</li>
       <li><b>Dogs:</b> a DOC dog permit where allowed, plus a current kiwi/bird aversion certificate in many areas. Dogs are banned in national parks and wilderness areas.</li>
       <li><b>Te Urewera:</b> permission from Te Uru Taumatua, not DOC. <b>Regional parks:</b> council permits (e.g. Greater Wellington).</li>

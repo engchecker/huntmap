@@ -707,7 +707,7 @@ function renderIdentify(p, r) {
     if (h0.HuntingWebPage) h += `<a class="btn ghost" href="${esc(h0.HuntingWebPage)}" target="_blank" rel="noopener">Block page &amp; rules</a>`;
     else h += `<a class="btn ghost" href="${LINKS.docHunting}" target="_blank" rel="noopener">DOC hunting info</a>`;
     h += `</div>`;
-    if ((h0.HuntStatus || '') === 'Permitted') h += `<p class="sub">An open permit covers deer, pigs, goats, wallabies, chamois and tahr. Stalking pigs with a firearm needs no dog permit. Taking dogs needs whatever the “Dogs” condition says.</p>`;
+    if ((h0.HuntStatus || '') === 'Permitted') h += `<p class="sub">An open permit covers deer, pigs, goats, wallabies, chamois and tahr. Feral sheep need a permit from the nearest DOC office. Stalking pigs with a firearm needs no dog permit. Taking dogs needs whatever the “Dogs” condition says.</p>`;
   }
 
   if (r.speciesKnown || r.species.length) {
@@ -1218,7 +1218,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.8 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.8.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };

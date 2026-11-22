@@ -195,6 +195,18 @@ window.BEHAVIOUR = {
     signs: ['Paired, Y-shaped prints about 10 × 5 cm with a tail drag; leaps over 2 m', 'Fibrous pellets 2.5–3 × 1.5 cm, often joined on lucerne', 'Bare, worn pad runs from scrub into clearings', 'Celmisia leaves bitten off at the base and discarded'],
     tips: ['Range centred on the Hunter Hills near Waimate (~300,000 ha), Kirkliston Range and South Canterbury', 'DOC: watch pad runs into pasture or tussock clearings from early evening rather than stalking', 'On DOC land you can only shoot in daylight (no spotlights or night-vision). Night shooting is for private land with permission', 'Aim for the upper body; a squatting wallaby shows mostly gut and hindquarters. DOC suggests .222 or .243']
   },
+  sheep: {
+    name: 'Feral sheep', rut: { from: [6, 1], to: [7, 31], label: 'peak breeding' },
+    veg: { feed: { open: 1, scatter: 0.95, scrub: 0.5, native: 0.25, exotic: 0.2, swamp: 0.3, rock: 0.2, ice: 0, water: 0, sand: 0.1 }, bed: { open: 0.4, scatter: 0.8, scrub: 1, native: 0.8, exotic: 0.6, swamp: 0.2, rock: 0.5, ice: 0, water: 0, sand: 0 } },
+    slope: { feed: [0, 3, 30, 45], bed: [5, 10, 40, 55] }, edge: { feed: 100, bed: 120 }, water: 700, disturb: 350, tpi: { feed: 0, bed: 0.2 },
+    warm: { summer: -0.3, autumn: 0.4, winter: 0.9, spring: 0.5 }, elev: { summer: 0.5, autumn: 0.45, winter: 0.35, spring: 0.4 },
+    w: { veg: 1.6, slope: 1, edge: 1.4, water: 0.2, disturb: 0.8, warm: 1, elev: 0.3, slip: 0.3, tpi: 0.4, cliff: 0.3, shelter: 0.8 },
+    schedule: { summer: { dawn: 0.9, day: 0.6, dusk: 0.9, night: 0.2 }, autumn: { dawn: 0.9, day: 0.75, dusk: 0.9, night: 0.2 }, winter: { dawn: 0.85, day: 0.85, dusk: 0.85, night: 0.2 }, spring: { dawn: 0.9, day: 0.7, dusk: 0.9, night: 0.2 } },
+    doing: { summer: 'Grazing on and off through the day on rough pasture and herbs, close to broken scrub or bush for shelter (DOC). Expect them out at any hour.', autumn: 'As summer; rams may run in small groups outside breeding.', winter: 'Breeding peaks in June and July (DOC). Sunny, sheltered faces in cold weather.', spring: 'Lambing mostly July to September, some populations in March (DOC). Ewes and lambs stay together.', rut: 'Breeding peaks June–July. Rams join the ewes.' },
+    diet: 'Pasture grasses and herbaceous plants (DOC).', waterTxt: 'Not a strong draw.',
+    signs: ['Wool caught on fences, scrub and rock', 'Sheep tracks and camps under scrub and rock overhangs', 'Pellet piles and closely grazed patches near cover', 'When disturbed they run for cover; domestic sheep run into the open (DOC)'],
+    tips: ['Eleven recognised populations (8 mainland, 3 islands), mostly on private land (DOC)', 'Public options: Waianakarua Scenic Reserve (North Otago) and the Kaweka Forest Park edges of the Mohaka and Ngaruroro valleys. Permit from the nearest DOC office: the online system doesn’t cover sheep (DOC)', 'Arapawa, Chatham and Pitt Island sheep: professional guides only (DOC)', 'Thick fleece: use at least a .243 (DOC)', 'Watch the mob for a while, check for sheep you haven’t seen, and don’t spook the rest when stalking a ram (DOC). Horns aren’t shed, so trophies are year-round']
+  },
   dama: {
     name: 'Dama & parma wallabies', rut: null,
     veg: { feed: { open: 1, scatter: 0.9, scrub: 0.6, native: 0.45, exotic: 0.5, swamp: 0.4, rock: 0.05, ice: 0, water: 0, sand: 0.1 }, bed: { open: 0.1, scatter: 0.6, scrub: 1, native: 0.9, exotic: 0.95, swamp: 0.3, rock: 0.1, ice: 0, water: 0, sand: 0 } },

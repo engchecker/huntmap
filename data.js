@@ -179,7 +179,7 @@ window.ACCESS_DIRECTORY = [
     region: 'Hawke’s Bay and others', pins: [[-39.30, 176.55]],
     species: ['deer'], deerTypes: 'Six deer species and elk (preserve)',
     access: 'Commercial outfitters lease stations and fenced or free-range preserves for sambar, rusa, trophy red stag, fallow, Arapawa and Pitt Island sheep and helicopter tahr. Usually guided; rifles and optics often supplied.',
-    detail: 'The paid option for the hardest-to-reach species.', contact: 'Each outfitter', url: '',
+    detail: 'The paid option for the hardest-to-reach species. Arapawa Island sheep (game reserves) and Chatham/Pitt Island sheep are hunted only with professional guides (DOC).', contact: 'Each outfitter', url: '',
     dogs: '—', source: 'Hunting reports (Nov 2026)'
   }
 ];
@@ -198,5 +198,6 @@ window.SPECIES = [
   { key: 'tahr',     label: 'Tahr',            group: 'other',svc: 'Himalayan_Tahr_Distribution_2014',  colour: '#475569' },
   { key: 'chamois',  label: 'Chamois',         group: 'other',svc: 'Chamois_Distribution_2007',         colour: '#334155' },
   { key: 'bennetts', label: 'Bennett’s wallaby', group: 'other',svc: 'FAUNA_BennettsWallaby_2007_BDI_simplified_distribution', all: true, colour: '#a16207' },
-  { key: 'dama',     label: 'Dama & parma wallabies', group: 'other',svc: 'FAUNA_DamaWallaby_2007_BDI_simplified_distribution', all: true, colour: '#ca8a04' }
+  { key: 'dama',     label: 'Dama & parma wallabies', group: 'other',svc: 'FAUNA_DamaWallaby_2007_BDI_simplified_distribution', all: true, colour: '#ca8a04' },
+  { key: 'sheep',    label: 'Feral sheep',     group: 'other',svc: 'FAUNA_FeralSheep_2007_BDI_simplified_distribution', all: true, colour: '#78716c' }
 ];

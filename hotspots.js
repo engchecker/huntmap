@@ -68,7 +68,8 @@ const SRC = {
   fSouth: 'https://www.nzhuntingandshooting.co.nz/threads/south-island-advice.121552/',
   fDunedin: 'https://www.nzhuntingandshooting.co.nz/f12/hunting-around-dunedin-111464/',
   huntscout: 'https://www.huntscout.app/blog/doc-hunting-permit-areas-nz',
-  huntingnz: 'https://huntingnz.co.nz/reference'
+  huntingnz: 'https://huntingnz.co.nz/reference',
+  sheep: D + 'what-to-hunt/feral-sheep/'
 };
 const S = k => SRC[k];
 window.HOTSPOTS = [
@@ -135,6 +136,9 @@ window.HOTSPOTS = [
   { id: 'whangarei', name: 'Tangihua, Mareretu & Mangakahia forests', region: 'Northland', size: 1, pts: [[-35.85, 173.95], [-35.65, 173.95], [-36.02, 174.35]],
     sp: { pig: 2, goat: 2 }, access: 'Open DOC permit (Mangakahia: no formed access)',
     note: 'DOC: the larger Whangārei-area forests are the popular pig and goat blocks.', src: [S('whangarei'), S('pigs')] },
+  { id: 'mohaka', name: 'Mohaka & Ngaruroro valleys (Kaweka edges)', region: 'Hawke’s Bay', size: 1, pts: [[-39.25, 176.50], [-39.45, 176.35]],
+    sp: { sheep: 1, sika: 2, red: 1 }, access: 'Mostly private land; the Kaweka Forest Park parts need a permit from a DOC office for sheep',
+    note: 'DOC: fragmented feral sheep populations, mostly on private land, with some inside Kaweka Forest Park.', src: [S('sheep'), S('kaweka')] },
   { id: 'remutaka', name: 'Remutaka Forest Park', region: 'Wellington', size: 1, pts: [[-41.30, 175.08]],
     sp: { red: 2, goat: 2, pig: 2 }, access: 'Open DOC permit',
     note: 'Close to Wellington. Steep bush ridges broken by shingle slips and scrub gullies. Forums favour glassing slips from the opposite spur and taking steady 100–250 m shots; goats on the eastern faces. Hard meat recovery.', src: [S('fWgtn'), S('rWgtn')] },
@@ -188,6 +192,9 @@ window.HOTSPOTS = [
   { id: 'lewisPass', name: 'Lewis Pass tops', region: 'North Canterbury / West Coast', size: 1, pts: [[-42.38, 172.40]],
     sp: { red: 2, chamois: 2 }, access: 'Open DOC permit; park on SH7',
     note: 'Forum favourite for easy road-access tops: 2–3 h climb through beech to tussock. Camp by alpine tarns and glass basins at first and last light; deer drop into the bush by mid-morning. Huts busy with Te Araroa walkers in summer.', src: [S('fLewis')] },
+  { id: 'waianakarua', name: 'Waianakarua Scenic Reserve', region: 'North Otago', size: 1, pts: [[-45.27, 170.72]],
+    sp: { sheep: 2 }, access: 'DOC hunting permit from the nearest DOC office (not online)',
+    note: 'DOC lists hunting for feral sheep in the Waianakarua Scenic Reserve. Sheep feed at any time of day: glass rough pasture near broken scrub. Use .243 or larger for the fleece.', src: [S('sheep')] },
   { id: 'torlesse', name: '13 Mile Bush, Korowai Torlesse Tussocklands', region: 'Canterbury', size: 1, pts: [[-43.28, 171.75]],
     sp: { red: 1, chamois: 1, pig: 1 }, access: 'Open DOC permit', note: 'Low to moderate red deer, chamois and pigs, close to Christchurch.', src: [S('canterbury')] },
   { id: 'ahuriri', name: 'Ahuriri Conservation Park', region: 'Canterbury / Otago', size: 2, pts: [[-44.30, 169.65], [-44.45, 169.60]],
