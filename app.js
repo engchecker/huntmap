@@ -745,8 +745,8 @@ function renderIdentify(p, r) {
 
   h += `<div class="btnrow"><button class="btn" data-act="tripPlan" data-lng="${p[0]}" data-lat="${p[1]}">Plan a trip here</button></div>`;
   h += `<h3>Go there</h3><div class="btnrow">
-    <a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${p[1]},${p[0]}" target="_blank" rel="noopener">Drive (Google)</a>
-    <a class="btn ghost" href="https://maps.apple.com/?daddr=${p[1]},${p[0]}" target="_blank" rel="noopener">Apple Maps</a>
+    <a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${p[1]},${p[0]}&travelmode=driving" target="_blank" rel="noopener">Drive (Google)</a>
+    <a class="btn ghost" href="https://maps.apple.com/directions?destination=${p[1]},${p[0]}&mode=driving" target="_blank" rel="noopener">Apple Maps</a>
     <button class="btn ghost" data-act="saveWp" data-lng="${p[0]}" data-lat="${p[1]}">Save waypoint</button>
     <button class="btn ghost" data-act="copy" data-text="${p[1].toFixed(6)}, ${p[0].toFixed(6)}">Copy coords</button>
     <button class="btn ghost" data-act="cond" data-lng="${p[0]}" data-lat="${p[1]}">Wind &amp; sun</button></div>
@@ -1220,7 +1220,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.9 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.9.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
