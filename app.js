@@ -150,6 +150,7 @@ const LINKS = {
   lrs: 'https://lrs.linz.govt.nz/search/',
   lrsInfo: 'https://www.linz.govt.nz/products-services/land-records/land-record-search',
   haNuku: 'https://www.herengaanuku.govt.nz/types-of-access/unformed-legal-roads',
+  haNukuMap: 'https://www.herengaanuku.govt.nz/maps/outdoor-access-maps',
   adventure: 'https://www.adventuresmart.nz/',
   linzKey: 'https://basemaps.linz.govt.nz/'
 };
@@ -162,6 +163,7 @@ const LAYERS = [
   { id: 'res', group: 'paa', minz: 11, url: PAA + '3', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
   { id: 'parks', group: 'paa', minz: 11, url: PAA + '5', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
   { id: 'other', group: 'paa', minz: 11, url: PAA + '6', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose' },
+  { id: 'marg', group: 'paa', minz: 11, url: PAA + '4', fields: 'paa_type,public_access,managed_by,common_name,statutory_purpose', where: "paa_type LIKE 'Marginal Strip%'" },
   { id: 'parcels', group: 'parcels', minz: 13, url: LINZ + 'LINZ_NZ_Primary_Parcels/FeatureServer/0', fields: 'appellation,parcel_intent,land_district,titles,calc_area', pages: 5 },
   { id: 'pestWill', group: 'pest', minz: 7, url: DOC + 'Pesticides_WillBeLaid_HFV/FeatureServer/0', fields: 'BlockName,Pesticide,PesticideTradeName,MethodName,StartDate,FinishDate,LeadAgency,CautionPeriod' },
   { id: 'pestHave', group: 'pest', minz: 7, url: DOC + 'Pesticides_HaveBeenLaid_HFV/FeatureServer/0', fields: 'BlockName,Pesticide,PesticideTradeName,MethodName,StartDate,FinishDate,LeadAgency,CautionPeriod' },
@@ -170,7 +172,8 @@ const LAYERS = [
   { id: 'tracks', group: 'huts', minz: 10, url: DOC + 'DOC_Tracks_Open_Data/FeatureServer/0', fields: '*' },
   { id: 'addr', group: 'safety', minz: 99, url: LINZ + 'LINZ_NZ_Addresses/FeatureServer/0', fields: 'full_address', pages: 8, max: 2000 },
   { id: 'rdl', group: 'safety', minz: 99, url: LINZ + 'LINZ_NZ_Addresses_Roads/FeatureServer/0', fields: 'full_road_name', pages: 6, max: 2000 },
-  ...SPECIES.map(s => ({ id: 'sp_' + s.key, group: 'species', sp: s, minz: 5, url: DOC + s.svc + '/FeatureServer/0', fields: 'CommonName,PA', where: "PA='Presence'" }))
+  // DOC distribution maps; the wallaby layers have no presence field (every polygon is presence)
+  ...SPECIES.map(s => ({ id: 'sp_' + s.key, group: 'species', sp: s, minz: 5, url: DOC + s.svc + '/FeatureServer/0', fields: s.all ? 'OBJECTID' : 'CommonName,PA', where: s.all ? '1=1' : "PA='Presence'" }))
 ];
 const LBY = Object.fromEntries(LAYERS.map(l => [l.id, l]));
 const BASEMAPS = {
@@ -340,7 +343,8 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 const PAL = {
   doc: '#1b7f3b', docLine: '#0f5a28',
   huntOk: '#a3e635', huntOkLine: '#4d7c0f', huntRes: '#f59e0b', huntResLine: '#b45309', huntNo: '#dc2626',
-  road: '#f97316', roadLine: '#c2410c', access: '#0ea5e9', accessLine: '#0369a1',
+  road: '#fb923c', roadLine: '#c2410c', paper: '#ea580c', paperLine: '#7c2d12', access: '#0ea5e9', accessLine: '#0369a1',
+  marg: '#14b8a6', margLine: '#0f766e', pae: '#6366f1', paeLine: '#3730a3',
   priv: '#e11d48', maori: '#a21caf', river: '#64748b', check: '#94a3b8'
 };
 const BASE_OP = {};
@@ -391,10 +395,16 @@ function addOverlays() {
   addF('res-f', 'res', PAL.access, 0.3);
   addF('parks-f', 'parks', PAL.access, 0.25);
   addF('other-f', 'other', PAL.access, 0.3);
-  addF('ease-f', 'ease', PAL.access, 0.45);
-  add({ id: 'ease-l', type: 'line', source: 'ease', paint: { 'line-color': PAL.accessLine, 'line-width': 2 } });
-  addF('road-f', 'road', PAL.road, 0.6, { minzoom: 12 });
-  add({ id: 'road-l', type: 'line', source: 'road', minzoom: 12, paint: { 'line-color': PAL.roadLine, 'line-width': 1 } });
+  // the three enduring rights of passage: paper roads, marginal strips, Crown forest Public Access Easements
+  const isPAE = ['==', ['get', 'paa_type'], 'PAE Easement'], isPaper = ['==', ['get', 'paa_type'], 'Unformed Legal Road Parcel'];
+  addF('ease-f', 'ease', ['case', isPAE, PAL.pae, PAL.access], 0.5);
+  add({ id: 'ease-l', type: 'line', source: 'ease', filter: ['!', isPAE], paint: { 'line-color': PAL.accessLine, 'line-width': 2 } });
+  add({ id: 'ease-p', type: 'line', source: 'ease', filter: isPAE, paint: { 'line-color': PAL.paeLine, 'line-width': 2.5, 'line-dasharray': [3, 2] } });
+  addF('marg-f', 'marg', PAL.marg, 0.55, { minzoom: 11 });
+  add({ id: 'marg-l', type: 'line', source: 'marg', minzoom: 11, paint: { 'line-color': PAL.margLine, 'line-width': 1.5 } });
+  addF('road-f', 'road', ['case', isPaper, PAL.paper, PAL.road], 0.6, { minzoom: 12 });
+  add({ id: 'road-l', type: 'line', source: 'road', minzoom: 12, filter: ['!', isPaper], paint: { 'line-color': PAL.roadLine, 'line-width': 1 } });
+  add({ id: 'road-p', type: 'line', source: 'road', minzoom: 12, filter: isPaper, paint: { 'line-color': PAL.paperLine, 'line-width': 2, 'line-dasharray': [2, 1.5] } });
   ['pestWill', 'pestHave'].forEach((id, i) => {
     addF(id + '-f', id, '#d23a2b', i ? 0.08 : 0.14);
     add({ id: id + '-l', type: 'line', source: id, paint: { 'line-color': '#b91c1c', 'line-width': 2, 'line-dasharray': [2, 2] } });
@@ -445,7 +455,7 @@ function applyVisibility() {
 function setData(id, fc) { const s = map.getSource(id); if (s) s.setData(fc); if (PUBLIC_IDS.includes(id) || id === 'parcels') { privDirty = true; if (!state.refreshing) schedulePriv(); } }
 
 /* "needs landowner permission": parcels whose interior isn't DOC land or public access */
-const PUBLIC_IDS = ['pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other'];
+const PUBLIC_IDS = ['pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other', 'marg'];
 let privTimer = null, privDirty = true;
 function schedulePriv() { clearTimeout(privTimer); privTimer = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(computePriv, { timeout: 600 }) : computePriv()), 150); }
 function fbbox(f) {
@@ -566,17 +576,17 @@ map.on('click', e => {
   identify(p);
 });
 
-const SRC_NAME = { hunt: 'DOC hunting areas', pcl: 'DOC land', road: 'legal roads', ease: 'easements', res: 'reserves', parks: 'council parks', other: 'other public access', pestWill: 'pesticide', pestHave: 'pesticide', parcels: 'property boundaries', titles: 'titles' };
+const SRC_NAME = { hunt: 'DOC hunting areas', pcl: 'DOC land', road: 'legal roads', ease: 'easements', res: 'reserves', parks: 'council parks', other: 'other public access', marg: 'marginal strips', pestWill: 'pesticide', pestHave: 'pesticide', parcels: 'property boundaries', titles: 'titles' };
 async function retry(fn, tries = 2) { let err; for (let i = 0; i < tries; i++) { try { return await fn(); } catch (e) { err = e; if (i < tries - 1) await sleep(800); } } throw err; }
 async function identifyOnline(p) {
   const q = (L, geom = false, tries = 1) => retry(() => agsQuery(L.url, pointParams(p, L, geom), { pages: 1, timeout: 25000, rec: 20 }), tries).then(fc => fc.features);
-  const keys = ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'pestWill', 'pestHave'];
+  const keys = ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'marg', 'pestWill', 'pestHave'];
   // land queries first (critical), animals afterwards so they can't crowd the connection
   const proms = keys.map(k => q(LBY[k]));
   const res = await Promise.allSettled(proms);
   if (res.every(r => r.status === 'rejected')) throw new Error('offline');
   const spProms = SPECIES.map(s => {
-    const qs = new URLSearchParams({ f: 'json', where: "PA='Presence'", geometry: p.join(','), geometryType: 'esriGeometryPoint', inSR: 4326, spatialRel: 'esriSpatialRelIntersects', returnCountOnly: true });
+    const qs = new URLSearchParams({ f: 'json', where: LBY['sp_' + s.key].where, geometry: p.join(','), geometryType: 'esriGeometryPoint', inSR: 4326, spatialRel: 'esriSpatialRelIntersects', returnCountOnly: true });
     return fetchT(LBY['sp_' + s.key].url + '/query?' + qs, 20000).then(r => r.json()).then(j => { if (j.error) throw 0; return j.count > 0 ? s.key : null; });
   });
   const spr = await Promise.allSettled(spProms);
@@ -598,7 +608,7 @@ async function parcelOnline(p) {
 }
 /* Fill anything the live lookup missed from data already loaded for the map (same sources). */
 function mergeLocal(r, local) {
-  const keys = ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'pestWill', 'pestHave', 'parcel'];
+  const keys = ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'marg', 'pestWill', 'pestHave', 'parcel'];
   let used = false;
   for (const k of keys) if ((!r[k] || !r[k].length) && local[k] && local[k].length) { r[k] = local[k]; used = true; }
   if (!r.speciesKnown && local.speciesKnown) { r.species = local.species; r.speciesKnown = true; used = true; }
@@ -617,7 +627,7 @@ function identifyLocal(p) {
     const hits = []; for (const fc of fcs) for (const f of fc.features) if (featContains(f, p)) hits.push(f);
     return hits;
   };
-  ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'pestWill', 'pestHave'].forEach(k => { out[k] = pick(k).map(f => f.properties); });
+  ['hunt', 'pcl', 'road', 'ease', 'res', 'parks', 'other', 'marg', 'pestWill', 'pestHave'].forEach(k => { out[k] = pick(k).map(f => f.properties); });
   out.parcel = pick('parcels');
   for (const s of SPECIES) {
     const id = 'sp_' + s.key;
@@ -628,7 +638,10 @@ function identifyLocal(p) {
 }
 const ROADISH = /^(Road|Road Strata|Vesting on Deposit for Road)$/i;
 function classify(r) {
-  if (r.road && r.road.length) return { cat: 'road', title: 'Legal road — public access', text: 'If no road shows on the map, this is probably an unformed (“paper”) road. You can walk it, but don’t shoot from or across a road.' };
+  if (r.road && r.road.length) {
+    if (r.road.some(x => x.paa_type === 'Unformed Legal Road Parcel')) return { cat: 'road', title: 'Paper road (unformed legal road)', text: 'Same public right to pass as a formed road, even if it’s overgrown or planted in pines. Walk, ride or drive it to reach land beyond, but don’t hunt from it or shoot across it, and don’t leave it onto private land without permission.' };
+    return { cat: 'road', title: 'Legal road — public access', text: 'If no road shows on the map, this is probably an unformed (“paper”) road. You can walk it, but don’t shoot from or across a road.' };
+  }
   const h = r.hunt && r.hunt[0];
   if (h) {
     const s = (h.HuntStatus || '').toLowerCase();
@@ -641,6 +654,10 @@ function classify(r) {
     if (/marginal/i.test(pcl.Type || '')) return { cat: 'access', title: 'Marginal strip — public access', text: 'Walking access along the water. Hunting isn’t covered unless DOC lists it as a hunting area.' };
     return { cat: 'no', title: 'Conservation land — not a hunting area', text: 'Public conservation land outside DOC’s hunting permit areas. Treat it as no hunting.' };
   }
+  const mg = r.marg && r.marg[0];
+  if (mg) return { cat: 'access', title: 'Marginal strip — public access', text: 'A strip (usually 20 m) along a river, lake or the coast, reserved for public access. Walk along it to reach land beyond. Only hunt here if it’s inside a DOC hunting area, and never shoot across neighbouring private land.' + (/movable/i.test(mg.paa_type || '') ? ' This strip moves with the water’s edge, so the mapped line is approximate.' : '') };
+  const pae = r.ease && r.ease.find(x => x.paa_type === 'PAE Easement');
+  if (pae) return { cat: 'access', title: 'Public Access Easement (Crown forest)', text: 'Registered under the Crown Forest Assets Act 1989 and stays in place when the forest is sold. Walk through to reach public land. It can close at night, during harvesting or in high fire danger, and it is not permission to hunt in the forest.' };
   const pa = (r.ease && r.ease[0]) || (r.res && r.res[0]) || (r.parks && r.parks[0]) || (r.other && r.other[0]);
   if (pa) return { cat: 'access', title: 'Public access: ' + (pa.paa_type || 'access area'), text: 'Access isn’t permission to hunt or shoot. Check with ' + (pa.managed_by || 'the land manager') + '.' };
   const pc = r.parcel && r.parcel[0] && r.parcel[0].properties;
@@ -699,13 +716,14 @@ function renderIdentify(p, r) {
 
   const pests = [...(r.pestWill || []), ...(r.pestHave || [])];
   if (pests.length) {
-    h += `<div class="warnbox"><b>⚠ Pesticide operation</b><br>` + pests.slice(0, 4).map(x => `${esc(x.BlockName || 'Operation')}: ${esc(x.Pesticide || '')} ${x.MethodName ? '(' + esc(x.MethodName) + ')' : ''}${x.StartDate ? ' · ' + fmtDate(x.StartDate) : ''}${x.FinishDate ? '–' + fmtDate(x.FinishDate) : ''}${x.CautionPeriod ? ' · caution period ' + esc(x.CautionPeriod) + ' months' : ''}`).join('<br>') + `<br>Don’t take dogs. Don’t eat game from operation areas during caution periods.</div>`;
+    h += `<div class="warnbox"><b>⚠ Pesticide operation</b><br>` + pests.slice(0, 4).map(x => `${esc(x.BlockName || 'Operation')}: ${esc(x.Pesticide || '')} ${x.MethodName ? '(' + esc(x.MethodName) + ')' : ''}${x.StartDate ? ' · ' + fmtDate(x.StartDate) : ''}${x.FinishDate ? '–' + fmtDate(x.FinishDate) : ''}${x.CautionPeriod ? ' · caution period ' + esc(x.CautionPeriod) + ' months' : ''}`).join('<br>') + `<br>Don’t take dogs. Don’t eat game from inside the operation or its buffer (2 km for deer, goats and pigs; 5 km for pigs where brodifacoum is used) during the caution period. <button class="btn small ghost" data-act="mRules">Poison rules</button></div>`;
   }
 
-  const pa = [...(r.road || []).map(x => ({ ...x, k: 'Legal road' })), ...(r.ease || []), ...(r.res || []), ...(r.parks || []), ...(r.other || [])];
+  const PAA_LABEL = { 'Unformed Legal Road Parcel': 'Paper road (unformed legal road)', 'Road Parcel': 'Legal road', 'PAE Easement': 'Public Access Easement (Crown Forest Assets Act)', 'Marginal Strip - Fixed': 'Marginal strip (fixed)', 'Marginal Strip - Movable': 'Marginal strip (moves with the water’s edge)' };
+  const pa = [...(r.road || []), ...(r.marg || []), ...(r.ease || []), ...(r.res || []), ...(r.parks || []), ...(r.other || [])].map(x => ({ ...x, paa_type: PAA_LABEL[x.paa_type] || x.paa_type || 'Legal road' }));
   if (pa.length) {
     h += `<h3>Public access</h3><ul class="list">` + pa.slice(0, 4).map(x => `<li><span class="t">${esc(x.paa_type || x.k || 'Access')}</span>${x.common_name ? ' — ' + esc(x.common_name) : ''}<br><span class="sub">Access: ${esc(x.public_access || '?')} · Managed by ${esc(x.managed_by || '?')}${x.statutory_purpose ? ' · ' + esc(x.statutory_purpose) : ''}</span></li>`).join('') + `</ul>`;
-    if (r.road && r.road.length) h += `<p class="sub"><a href="${LINKS.haNuku}" target="_blank" rel="noopener">About unformed legal roads (Herenga ā Nuku)</a></p>`;
+    h += `<p class="sub">Access lets you pass through. It isn’t permission to hunt, and you can’t shoot across neighbouring private land. Check the route on the ground and on <a href="${LINKS.haNukuMap}" target="_blank" rel="noopener">Herenga ā Nuku’s map</a>.${r.road && r.road.length ? ` <a href="${LINKS.haNuku}" target="_blank" rel="noopener">About paper roads</a>.` : ''}</p>`;
   }
 
   const pc = r.parcel && r.parcel[0] && r.parcel[0].properties;
@@ -826,7 +844,8 @@ function layersSheet() {
     ${tg('hunt', 'Huntable with a permit only', PAL.huntOk, 'DOC hunting areas. No landowner permission needed, just the DOC permit')}
     <div class="legend"><span>${sw(PAL.huntOk)}Permitted</span><span>${sw(PAL.huntRes)}Restricted / ballot</span><span><i class="swatch" style="background:repeating-linear-gradient(45deg,#dc2626 0 2px,#fff 2px 6px)"></i>No hunting</span></div>
     ${tg('paa', 'Public access to travel through', PAL.access, 'You can walk through, but you can’t hunt on it without the manager’s say-so (zoom 11+)')}
-    <div class="legend"><span>${sw(PAL.road)}Legal &amp; paper roads</span><span>${sw(PAL.access)}Easements, strips, reserves</span></div>
+    <div class="legend"><span>${sw(PAL.paper)}Paper (unformed) roads</span><span>${sw(PAL.road)}Formed legal roads</span><span>${sw(PAL.marg)}Marginal strips</span><span>${sw(PAL.pae)}Forestry access easements (PAEs)</span><span>${sw(PAL.access)}Other easements &amp; reserves</span></div>
+    <p class="sub">Paper roads, marginal strips and Crown forest PAEs are lasting legal rights to pass through, mapped by Herenga ā Nuku. Use them to reach land-locked DOC blocks. Passing through is not permission to hunt the land either side.</p>
     ${tg('priv', 'Needs landowner permission', PAL.priv, 'All other land (zoom 13+)')}
     <div class="legend"><span>${sw(PAL.priv)}Private</span><span>${sw(PAL.maori)}Māori land</span><span>${sw(PAL.river)}Riverbed</span><span>${sw(PAL.check)}Other Crown / reserve: check</span></div>
     ${tg('parcels', 'Property boundary lines', '#ffffff', 'Zoom 14+')}
@@ -898,7 +917,7 @@ function accessDetail(id) {
     <div class="tags">${a.species.map(s => `<span class="tag hit">${spLabel[s]}</span>`).join('') || '<span class="tag">Not a public hunting option</span>'}</div>
     <p>${esc(a.access)}</p><p class="sub">${esc(a.detail)}</p>
     <dl class="kv">${a.deerTypes ? `<dt>Deer</dt><dd>${esc(a.deerTypes)}</dd>` : ''}<dt>Dogs</dt><dd>${esc(a.dogs)}</dd><dt>Contact</dt><dd>${esc(a.contact)}</dd><dt>Source</dt><dd>${esc(a.source)} (checked Nov 2026)</dd></dl>
-    <div class="btnrow"><a class="btn" href="${esc(a.url)}" target="_blank" rel="noopener">Website</a><button class="btn ghost" data-act="accGo" data-id="${a.id}">Show on map</button><button class="btn ghost" data-act="accList">All listings</button></div>`, { kind: 'access' });
+    <div class="btnrow">${a.url ? `<a class="btn" href="${esc(a.url)}" target="_blank" rel="noopener">Website</a>` : ''}${a.pins.length ? `<button class="btn ghost" data-act="accGo" data-id="${a.id}">Show on map</button>` : ''}<button class="btn ghost" data-act="accList">All listings</button></div>`, { kind: 'access' });
 }
 actions.accF = b => accessList(b.dataset.f);
 actions.accList = () => accessList();
@@ -1165,6 +1184,7 @@ $('#btnOffline').onclick = () => (sheetKind === 'offline' && !sheet.hidden ? clo
 /* ---------------- menu & settings ---------------- */
 function menuSheet() {
   showSheet(`<h2>Tools</h2><div class="menu">
+    <button data-act="mRules"><span>📋</span><span>Rules, seasons &amp; ballots<small>Key dates, permits, firearms law, poisons, meat safety</small></span></button>
     <button data-act="mFind"><span>🔎</span><span>Find animals<small>Likely spots from behaviour, terrain, cover, sun and wind</small></span></button>
     <button data-act="mArc"><span>🎯</span><span>Shooting arc check<small>What’s in your line of fire</small></span></button>
     <button data-act="mTrack"><span>🛻</span><span>Track &amp; back to the truck<small>Record your route, arrow back to any point</small></span></button>
@@ -1198,7 +1218,7 @@ function settingsSheet() {
     <p class="sub">DOC Open Data (hunting areas, conservation land, pesticide summaries, animal distribution 2007/2014). Toitū Te Whenua LINZ (Basemaps, primary parcels, titles without owners, place names). Herenga ā Nuku Aotearoa (Public Access Areas). Open-Meteo (wind). All CC BY 4.0 or open terms.</p>
     <h3>Disclaimer</h3>
     <p class="sub">A planning aid only. Boundaries are indicative, not survey-accurate. Data can be out of date. You’re responsible for having permission, the right permits and a firearms licence, and for following the Arms Code. When in doubt, don’t shoot.</p>
-    <p class="sub">Version 1.7.1 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
+    <p class="sub">Version 1.8 · ${navigator.serviceWorker && navigator.serviceWorker.controller ? 'Offline ready' : 'Offline support starts after the next reload'}</p>`, { tall: true, kind: 'settings' });
 }
 actions.keySave = () => { const k = $('#keyIn').value.trim(); if (!/^[cd][0-9a-z]{20,}$/i.test(k)) { toast('That doesn’t look like a LINZ key'); return; } state.key = k; LS.set('linzKey', k); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); toast('Key saved'); };
 actions.keyNew = () => { state.key = makeKey(); LS.set('linzKey', state.key); styleErrShown = false; map.setStyle(styleFor(state.base), { diff: false }); settingsSheet(); toast('New key created'); };
@@ -1427,7 +1447,7 @@ async function runArc() {
   setData('arc', cone);
   const b = fbbox(cone);
   arcSheet(`<p class="sub">Checking ${label.toLowerCase()} arc, ${fmtDist(r)} towards ${Math.round(arc.brg)}° ${compass(arc.brg)}…</p>`);
-  const ids = ['addr', 'rdl', 'tracks', 'huts', 'camps', 'parcels', 'pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other'];
+  const ids = ['addr', 'rdl', 'tracks', 'huts', 'camps', 'parcels', 'pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other', 'marg'];
   const fcs = {};
   await Promise.all(ids.map(async id => { try { fcs[id] = await dataFor(id, b); } catch { fcs[id] = EMPTY; } }));
   const inC = q => { const d = distM(arc.p, q); return d <= r && angDiff(bearing(arc.p, q), arc.brg) <= arc.half ? d : null; };
@@ -1452,7 +1472,7 @@ async function runArc() {
     if (best) hz.push({ label: lab, d: best.d, name: best.name });
   };
   lines('rdl', 'Road', p => p.full_road_name); lines('tracks', 'DOC track', pickName);
-  const priv = privFeatures(fcs.parcels, ['pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other'].flatMap(id => fcs[id].features));
+  const priv = privFeatures(fcs.parcels, ['pcl', 'hunt', 'road', 'ease', 'res', 'parks', 'other', 'marg'].flatMap(id => (fcs[id] || EMPTY).features));
   const step = r > 2000 ? 25 : 12, grid = [];
   for (let a = -arc.half; a <= arc.half + 0.01; a += Math.max(1, arc.half / 10)) for (let d = step; d <= r; d += step) grid.push({ q: dest(arc.p, arc.brg + a, d), d });
   const firstIn = (feats, lab) => {

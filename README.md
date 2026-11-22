@@ -104,8 +104,13 @@ No build step: plain files served as they are.
 | `app.js` | The app: map, land data loading, identify, layers, GPS, offline areas, field tools. Sections are listed at the top of the file |
 | `model.js` | Find animals habitat model (uses `window.HuntMap`, the app's small internal API) |
 | `behaviour.js` | Species behaviour profiles used by the model |
+| `rules.js` | Rules, seasons & ballots reference sheet (dated; check sources) |
 | `hotspots.js`, `data.js` | Public-land hotspots, access directory and species list |
 | `sw.js` | Service worker: app files network-first with offline fallback; map tiles cache-first |
 | `vendor/` | MapLibre GL 4.7.1 and a small vector-tile decoder |
 
 Saved offline areas keep a short summary list in memory. Each area's land data and tile list are stored separately in IndexedDB and only loaded for areas near where you're looking. Slope and sunny-face shading is worked out in a background worker so the map stays smooth.
+
+## Legal access routes
+
+The Public access layer shows Herenga ā Nuku's three lasting rights of passage in their own colours: paper (unformed legal) roads, marginal strips (from the Public Access Conservation Land layer) and Public Access Easements over former Crown forest land (Crown Forest Assets Act 1989). Tap one for what it allows. Passing through is not permission to hunt.

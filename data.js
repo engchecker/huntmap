@@ -26,7 +26,7 @@ window.ACCESS_DIRECTORY = [
     region: 'Central North Island / Bay of Plenty', pins: [[-38.62, 176.52], [-38.03, 176.55]],
     species: ['deer', 'pig'], deerTypes: 'Red (and sika in the south)',
     access: 'Recreational Forest Access Permit issued online by FIRST Security for Kaingaroa Tipu. Apply annually (15+), complete the online induction quiz.',
-    detail: 'Public vehicle access for hunting is generally daylight on weekends and public holidays; restricted during the fire season (1 Oct–30 Apr). Automatic gates at main entrances.',
+    detail: 'Three-step online process (about 30 min: induction, quiz, vehicle-linked application). Automatic gates open 6 am–6 pm on weekends and public holidays, with a strict 6 pm exit; restricted during the fire season (1 Oct–30 Apr). Free for verified landowners.',
     contact: 'FIRST Security (online)', url: 'https://www.firstsecurity.co.nz/forestry-permit',
     dogs: 'Allowed under permit conditions', source: 'FIRST Security; CNI Iwi Holdings land access policy'
   },
@@ -35,7 +35,7 @@ window.ACCESS_DIRECTORY = [
     region: 'Nelson / Tasman / Marlborough', pins: [[-41.47, 172.86]],
     species: ['deer', 'pig', 'goat'], deerTypes: 'Check with OFO',
     access: 'Public hunting season (2025 season ran 12 April–26 October). Permit fee $150 (2025). New season details released around April.',
-    detail: 'Includes Golden Downs and Rai forests (some land owned by Ngāti Toa, Ngāti Tama and Te Ātiawa). Upland game bird permits go through Fish & Game.',
+    detail: 'Hunting permit is separate from walking/biking access permits. Includes Golden Downs and Rai forests (some land owned by Ngāti Toa, Ngāti Tama and Te Ātiawa). Registered Public Access Easements cross some forests to Mt Richmond Forest Park: no permit needed to walk through, but no hunting on the way.',
     contact: 'OneFortyOne NZ, Richmond', url: 'https://onefortyone.com/community/public-information/public-hunting-new-zealand',
     dogs: 'Check permit conditions', source: 'OneFortyOne public hunting page'
   },
@@ -97,8 +97,8 @@ window.ACCESS_DIRECTORY = [
     id: 'matariki', name: 'Matariki Forests', type: 'Forestry',
     region: 'Coromandel / Waikato / Northland', pins: [[-37.05, 175.78]],
     species: ['pig', 'deer', 'goat'], deerTypes: 'Varies',
-    access: 'Recreational access is by permit. Fish & Game issues upland game bird permits only; contact Matariki directly for other hunting access.',
-    detail: 'Forests include Tairua, Maramarua, Waihou and Kauaeranga. Fish & Game Northland handles some Puhipuhi/Topuni access.',
+    access: 'Recreational access is by permit. Auckland/Waikato Fish & Game sells $50 forest access permits through its game-bird portal; confirm deer, pig and goat hunting conditions directly with Matariki’s regional contacts.',
+    detail: 'Forests include Tairua, Maramarua, Waihou and Kauaeranga. Fish & Game Northland handles some Puhipuhi/Topuni access. Extensive mapped Public Access Easements and paper roads cross Matariki land.',
     contact: 'Matariki Forests', url: 'https://www.matarikiforests.co.nz/',
     dogs: 'Check permit conditions', source: 'Fish & Game; Matariki public summary'
   },
@@ -115,10 +115,72 @@ window.ACCESS_DIRECTORY = [
     id: 'portblakely', name: 'Port Blakely forests', type: 'Not open to public',
     region: 'Canterbury / Otago', pins: [[-43.35, 172.25]],
     species: [], deerTypes: '',
-    access: 'Does not issue individual hunting permits. Hunting is managed through local hunting clubs.',
+    access: 'Does not issue individual hunting permits. Hunting is coordinated only through approved local hunting clubs, some with residency rules. Joining the club is the way in.',
     detail: 'Free access permits exist for walking and biking, not hunting.',
     contact: 'Nearest Port Blakely office', url: 'https://portblakely.com/nz-forestry/public-access',
     dogs: '—', source: 'Port Blakely website'
+  },
+  {
+    id: 'santoft', name: 'Ernslaw One — Santoft & Manawatū/Ruapehu', type: 'Forestry',
+    region: 'Manawatū / Whanganui', pins: [[-40.15, 175.25]],
+    species: ['deer', 'pig'], deerTypes: 'Sambar (most of Manawatū’s herd), red, fallow',
+    access: 'Weekend-only hunting permits. Apply to the Bulls office (06 322 1558) or the regional permit email with photo ID and your firearms licence.',
+    detail: 'Santoft Forest holds the majority of the Manawatū sambar herd. Ernslaw also has East Coast, Marlborough and Otago forests (Blue Mountains by ballot); each region has its own permits email. Closures for fire danger and logging.',
+    contact: 'Ernslaw One, Bulls: 06 322 1558', url: 'https://www.ernslaw.co.nz/',
+    dogs: 'Check permit conditions', source: 'Herenga ā Nuku forest permits page; DOC sambar page'
+  },
+  {
+    id: 'wenita', name: 'Wenita Forest Products', type: 'Forestry',
+    region: 'Otago', pins: [[-45.85, 170.10]],
+    species: ['deer', 'pig'], deerTypes: 'Red and fallow',
+    access: 'Single-party hunting bookings through the online portal (access.wenita.co.nz). Hunting list currently full: closed to new applicants while renewals are reviewed.',
+    detail: 'Needs a firearms licence and kill returns after every trip.',
+    contact: 'Online portal', url: 'https://access.wenita.co.nz/',
+    dogs: 'Check permit conditions', source: 'Wenita access portal'
+  },
+  {
+    id: 'otherForests', name: 'Other forestry permit portals', type: 'Forestry',
+    region: 'Nelson, Southland, Dunedin', pins: [[-41.30, 172.95], [-46.20, 168.60], [-45.80, 170.40]],
+    species: ['deer', 'pig', 'goat'], deerTypes: 'Varies by block',
+    access: 'Tasman Pine (Nelson), Southwood Export (Southland) and City Forests (Dunedin) run online recreation or access permits. Confirm whether hunting is allowed in each block.',
+    detail: 'Expect 1–3 week approvals, weekend-only hunting at many forests, and closures for logging or fire danger. Herenga ā Nuku keeps the list of forest permit systems.',
+    contact: 'Each company online', url: 'https://www.herengaanuku.govt.nz/types-of-access/forest-permits',
+    dogs: 'Check permit conditions', source: 'Herenga ā Nuku forest permits page'
+  },
+  {
+    id: 'mangatu', name: 'Mangatu Whenua forests', type: 'Not open to public',
+    region: 'Gisborne / East Coast', pins: [[-38.35, 177.75]],
+    species: [], deerTypes: '',
+    access: 'Access portal is for verified shareholders and their whānau only.',
+    detail: 'Don’t plan trips onto Māori trust forests unless you’re eligible or formally hosted under the trust’s rules.',
+    contact: 'Mangatu Incorporation', url: 'https://www.herengaanuku.govt.nz/types-of-access/forest-permits',
+    dogs: '—', source: 'Mangatu access portal'
+  },
+  {
+    id: 'huntable', name: 'Huntable (farm booking platform)', type: 'Online marketplace',
+    region: 'Nationwide', pins: [],
+    species: ['deer', 'pig', 'goat'], deerTypes: 'Set by each landowner',
+    access: 'Launched June 2026: book verified farm hunts online. The farm address stays hidden until your booking is confirmed; landowners set species, dates and numbers.',
+    detail: 'Useful if you have no rural contacts. HuntBlocks NZ (huntblocks.co.nz) is rebuilding a similar directory, not yet live.',
+    contact: 'Online', url: 'https://www.farmersweekly.co.nz/lifestyle/airbnb-style-platform-launches-for-private-land-hunting/',
+    dogs: 'Set by each landowner', source: 'Farmers Weekly (June 2026)'
+  },
+  {
+    id: 'nzda', name: 'NZ Deerstalkers Association branches', type: 'Hunting club',
+    region: 'Nationwide', pins: [],
+    species: ['deer', 'pig', 'goat'], deerTypes: 'All',
+    access: 'Joining a local branch gives club huts, balloted club blocks, some private forestry agreements and mentoring. Forum regulars call it the fastest legitimate route onto private ground.',
+    detail: 'E.g. the Wellington branch rebuilt Cattle Ridge Hut in the Tararua. Local district clubs also hold the hunting concessions in Port Blakely forests.',
+    contact: 'NZDA', url: 'https://www.deerstalkers.org.nz/',
+    dogs: '—', source: 'NZ Hunting & Shooting forums; Reddit r/Wellington'
+  },
+  {
+    id: 'kawekaPreserve', name: 'Kaweka Game Preserve & guided estates', type: 'Commercial / guided',
+    region: 'Hawke’s Bay and others', pins: [[-39.30, 176.55]],
+    species: ['deer'], deerTypes: 'Six deer species and elk (preserve)',
+    access: 'Commercial outfitters lease stations and fenced or free-range preserves for sambar, rusa, trophy red stag, fallow, Arapawa and Pitt Island sheep and helicopter tahr. Usually guided; rifles and optics often supplied.',
+    detail: 'The paid option for the hardest-to-reach species.', contact: 'Each outfitter', url: '',
+    dogs: '—', source: 'Hunting reports (Nov 2026)'
   }
 ];
 
@@ -134,5 +196,7 @@ window.SPECIES = [
   { key: 'goat',     label: 'Goats',           group: 'goat', svc: 'Feral_Goat_Distribution_2014',      colour: '#4d7c0f' },
   { key: 'pig',      label: 'Pigs',            group: 'pig',  svc: 'Feral_Pig_Distribution_2007',       colour: '#be185d' },
   { key: 'tahr',     label: 'Tahr',            group: 'other',svc: 'Himalayan_Tahr_Distribution_2014',  colour: '#475569' },
-  { key: 'chamois',  label: 'Chamois',         group: 'other',svc: 'Chamois_Distribution_2007',         colour: '#334155' }
+  { key: 'chamois',  label: 'Chamois',         group: 'other',svc: 'Chamois_Distribution_2007',         colour: '#334155' },
+  { key: 'bennetts', label: 'Bennett’s wallaby', group: 'other',svc: 'FAUNA_BennettsWallaby_2007_BDI_simplified_distribution', all: true, colour: '#a16207' },
+  { key: 'dama',     label: 'Dama & parma wallabies', group: 'other',svc: 'FAUNA_DamaWallaby_2007_BDI_simplified_distribution', all: true, colour: '#ca8a04' }
 ];

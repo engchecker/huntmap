@@ -381,6 +381,7 @@ function resultSheet() {
   res.per.forEach(r => { if (r.pres && r.pres.known && r.pres.frac === 0) warn.push(`DOC’s distribution data doesn’t show ${r.P.name.toLowerCase()} in this view.`); });
   if (res.opt.mask && !res.useMask) warn.push(res.huntCovered ? 'No DOC hunting areas in this view, so all land is scored. You need permission on private land.' : 'DOC hunting areas aren’t loaded for this view yet, so all land is scored. Zoom in a little and re-run to limit it to DOC hunting land.');
   if (res.G.crop) warn.push('The view was larger than the model can handle, so only the centre was scored.');
+  if (res.period === 'night') warn.push('Shooting at night is banned on DOC land (from 30 minutes after sunset to 30 minutes before sunrise). Night results are for planning, or for private land with permission.');
   const modeTxt = fr => fr >= 0.7 ? 'Mostly feeding' : fr <= 0.3 ? 'Mostly bedded or resting in cover' : 'A mix of feeding and resting';
   const calTxt = r => r.logs >= 3 ? `Tuned with ${r.logs} of your hunt-log entries here${r.calib.length ? ' (more weight on ' + r.calib.filter(c => c[1] > 1).map(c => c[0]).join(', ') + ')' : ''}.` : `${r.logs || 'No'} hunt-log entr${r.logs === 1 ? 'y' : 'ies'} here; with 3 or more the model tunes itself to where you’ve found them.`;
   const perHtml = res.per.map(r => {

@@ -52,8 +52,8 @@ window.BEHAVIOUR = {
       rut: 'The rut runs late March to early May; stags are most vocal and less cautious (DOC). Listen for the "hee-haw" call and the alarm whistle.'
     },
     diet: 'New grass and shrub growth; browse in the forest.', waterTxt: 'Creek heads and river flats.',
-    signs: [...DEER_SIGN.slice(0, 3), 'A shrill alarm whistle, often repeated while fleeing (DOC)', 'Animals lying flat: scan at ground level, not just deer height (DOC)'],
-    tips: ['Spring: hunt the fringes of river flats and grass areas (DOC)', 'Winter: move slowly through mid-valley slopes and gully heads, stopping often (DOC)', 'Last two hours of light: a purposeful approach often works (DOC)', 'Quiet clothing and soft rubber-soled footwear in dry summer bush (DOC)', 'Very wary of hunting pressure: get away from tracks.']
+    signs: [...DEER_SIGN.slice(0, 3), 'A shrill alarm whistle, often repeated while fleeing (DOC); over ten calls from soft mews to screams', 'Animals lying flat: scan at ground level, not just deer height (DOC)'],
+    tips: ['Herd of Special Interest since 15 July 2026 (Kaimanawa, Kaweka). Open DOC permits still apply', 'Sika punish scent errors: carry wind-checker powder and keep strictly downwind', 'Roar calling: treat a whistle or scream as a fix, close downwind, then call 10–20 s and stay silent 5–10 min. Stop if the wind swirls', 'Sit over small clearings, creek bottoms and bush margins in the first hour after dawn and last before dark', 'Spring: hunt the fringes of river flats and grass areas (DOC)', 'Winter: move slowly through mid-valley slopes and gully heads, stopping often (DOC)', 'Last two hours of light: a purposeful approach often works (DOC)', 'Quiet clothing and soft rubber-soled footwear in dry summer bush (DOC)', 'Very wary of hunting pressure: get away from tracks.']
   },
   fallow: {
     name: 'Fallow deer', rut: { from: [4, 1], to: [5, 15], label: 'the rut' },
@@ -69,7 +69,7 @@ window.BEHAVIOUR = {
       rut: 'April to about mid-May. Bucks set up territories with urine-marked scrapes and groan repeatedly, and are less cautious (DOC). Hunt early in the rut before points get broken (DOC).'
     },
     diet: 'A wide range of plants, including fungi (DOC).', waterTxt: 'Creeks and river flats in the lowland valleys they favour.',
-    signs: ['Urine-marked ground scrapes in the rut (DOC)', 'Barking alarm calls; females and young bleat; bucks groan in the rut (DOC)', ...DEER_SIGN.slice(0, 2)],
+    signs: ['Urine-marked ground scrapes in the rut (DOC)', 'Barking alarm calls; females and young bleat; bucks groan or croak in the rut (DOC)', 'Tail flicking constantly while feeding; four colour phases (dark, common spotted, menil, white)', ...DEER_SIGN.slice(0, 2)],
     tips: ['Hunt while they feed, when they’re easier to find and stalk (DOC)', 'Use cover and hunt into the wind: good eyes and nose (DOC)', 'Look along forest edges next to flats and farmland. Stay on land you’re allowed on.']
   },
   whitetail: {
@@ -85,7 +85,7 @@ window.BEHAVIOUR = {
     },
     diet: 'Grass and shrub growth on flats and edges; forest browse.', waterTxt: 'Strong swimmers. Water won’t stop them (DOC).',
     signs: ['Wallows and does herded in the rut (DOC)', 'Repeated use of the same feeding spot (DOC)', ...DEER_SIGN.slice(0, 2)],
-    tips: ['Stake out a known feeding spot at the same time of day (DOC)', 'If disturbed but not shot at, they often circle back. Wait quietly (DOC)', 'Move slowly, stop often, hunt into the wind (DOC)']
+    tips: ['Wild herds only on Rakiura/Stewart Island (bookable coastal blocks) and around Lake Wakatipu (Rees and Dart)', 'Stake out a known feeding spot at the same time of day (DOC)', 'If disturbed but not shot at, they often circle back. Wait quietly (DOC)', 'Move slowly, stop often, hunt into the wind (DOC)']
   },
   wapiti: {
     name: 'Wapiti', rut: { from: [3, 10], to: [4, 30], label: 'the bugle' },
@@ -103,15 +103,15 @@ window.BEHAVIOUR = {
     tips: ['Glass open tops, slips and clearings with good binoculars (DOC)', 'Flat-shooting calibre, minimum .270 (DOC)', 'Leave young bulls (DOC)']
   },
   sambar: {
-    name: 'Sambar deer', rut: { from: [6, 1], to: [8, 31], label: 'the rut' },
+    name: 'Sambar deer', rut: { from: [5, 25], to: [8, 31], label: 'the rut' },
     veg: { feed: { ...DEER_FEED, exotic: 0.6, scrub: 0.75 }, bed: { ...DEER_BED, exotic: 0.95, scrub: 1 } }, slope: { feed: [0, 0, 22, 35], bed: [3, 10, 30, 40] },
     edge: { feed: 80, bed: 200 }, water: 250, disturb: 600, tpi: { feed: -0.4, bed: -0.2 },
     warm: { summer: -0.4, autumn: 0, winter: 0.4, spring: 0.2 }, elev: { summer: 0.35, autumn: 0.3, winter: 0.25, spring: 0.3 },
     w: { ...W_DEER, water: 1, disturb: 1.4 }, schedule: { summer: { dawn: 0.9, day: 0.1, dusk: 0.9, night: 1 }, autumn: { dawn: 0.9, day: 0.1, dusk: 0.9, night: 1 }, winter: { dawn: 0.9, day: 0.2, dusk: 0.9, night: 1 }, spring: { dawn: 0.9, day: 0.15, dusk: 0.9, night: 1 } }, wallow: true,
-    doing: { summer: 'Mostly nocturnal; feed on edges and wet gullies at the very ends of the day.', autumn: 'As summer.', winter: 'Rut season. Stags mark trees and use wallows.', spring: 'Edges of forestry and scrub at first and last light.', rut: 'Rut mainly in winter. Stags rub and thrash trees and wallow.' },
+    doing: { summer: 'Mostly solitary and semi-nocturnal; feed on edges and wet gullies at the very ends of the day.', autumn: 'As summer; stags harden antlers from about June.', winter: 'Rut season. Stags mark trees and use wallows.', spring: 'Emerge onto spring grass and crops beside pine plantations and wetlands at first and last light.', rut: 'Rut mainly June–August but can run late May to December. Stags rub and thrash trees and wallow.' },
     diet: 'Grass, browse and fallen fruit along scrub and forestry edges.', waterTxt: 'Strongly tied to water, wet gullies and wallows.',
     signs: ['Heavy rubs and thrashed saplings', 'Wallows in wet gullies', 'Large prints and droppings on forestry tracks'],
-    tips: ['Mostly on private and forestry land. Check permits (DOC)', 'Hunt the last and first light along wet gullies and edges.']
+    tips: ['Overwhelmingly on private forestry in Manawatū (Santoft, via Ernslaw One) and Bay of Plenty. Check permits (DOC)', 'Hunt the last and first light along wet gullies, wetland margins and pine edges', 'Big animals (stags average ~245 kg): NZDA suggests .270, 7mm-08, .308, .30-06 or .303']
   },
   rusa: {
     name: 'Rusa deer', rut: { from: [7, 1], to: [8, 31], label: 'the rut' },
@@ -121,7 +121,7 @@ window.BEHAVIOUR = {
     w: { ...W_DEER, disturb: 1.4 }, schedule: deerSchedule(0.1),
     doing: { summer: 'Scrubby Galatea faces; feeding at dawn and dusk.', autumn: 'Dawn and dusk on scrub edges.', winter: 'Rut in mid-winter; stags vocal and more active.', spring: 'New growth on scrub faces.', rut: 'Rut in July–August.' },
     diet: 'Grass and browse in scrubby country (DOC notes they’ve adapted well to the scrubby Galatea faces).', waterTxt: 'Creeks in the faces.',
-    signs: DEER_SIGN, tips: ['Large tracts of Māori land in Te Urewera. Know exactly where you’re permitted (DOC)', 'Elusive: hunt slowly and glass scrub faces at first and last light.']
+    signs: [...DEER_SIGN, 'In the rut, stags tangle twigs and grass into their lyre-shaped antlers'], tips: ['Narrowest range of any deer: Galatea, the Ikawhenua foothills near Murupara and eastern Bay of Plenty', 'Large tracts of Māori land in Te Urewera. Know exactly where you’re permitted (DOC)', 'Scarce, nocturnal and trail-bound: hunt slowly and glass scrub faces at first and last light']
   },
   goat: {
     name: 'Goats', rut: null,
@@ -137,7 +137,7 @@ window.BEHAVIOUR = {
     },
     diet: 'Browse shrubs, trees, grasses and weeds (blackberry, brier, gorse). They seek out broadleaf and māhoe (DOC).', waterTxt: 'Get most moisture from browse. Water isn’t a strong draw.',
     signs: ['Strong billy smell, often the first sign. Work out the wind to find the source (DOC)', 'Goats calling to each other (DOC)', 'Pellet piles under bluffs and in rock shelters', 'Browsed-out broadleaf and māhoe; bark-stripped shrubs', 'Well-worn trails along bluffs and ledges'],
-    tips: ['Upland forest or scrub with grassy openings near shelter; sunny slopes (DOC)', 'If disturbed, wait: they often stay nearby (DOC)', 'In strong wind they avoid exposed slips; in rain they shelter (DOC)', 'Stalk upwind, especially in open country (DOC)']
+    tips: ['DOC culling has pushed peak goat numbers onto private farmland: offering goat control is the best way to get farm access', 'Old billies get very wary once pressured', 'Upland forest or scrub with grassy openings near shelter; sunny slopes (DOC)', 'If disturbed, wait: they often stay nearby (DOC)', 'In strong wind they avoid exposed slips; in rain they shelter (DOC)', 'Stalk upwind, especially in open country (DOC)']
   },
   pig: {
     name: 'Pigs', rut: null,
@@ -151,21 +151,21 @@ window.BEHAVIOUR = {
       autumn: 'Rooting in gullies and along stream flats at the ends of the day.', winter: 'Mainly active in daylight (DOC). Rooting fern and grass flats; sunny sheltered gullies.',
       spring: 'Breeding (mainly spring–summer, DOC). Sows with litters keep to thick cover.', rut: ''
     },
-    diet: 'Omnivorous: grass, roots, seeds, carrion, worms and insects (DOC). Root fern, flats and soft wet ground.', waterTxt: 'Strongly tied to water and wallows, especially in warm weather.',
-    signs: ['Fresh rooting (turned soil, still damp, with crisp edges)', 'Wallows and mud rubs on trees and posts near water', 'Cloven prints with dew-claw marks in soft ground', 'Fresh droppings and nest beds of bent fern or grass in thick cover', 'Tusk marks on trees (boars)'],
+    diet: 'About 70% plants: bracken fern roots above all, plus nīkau frond bases, supplejack, Astelia bases, nettles, thistles, grasses and fruit. The rest is worms, beetles, snails, carrion, eggs and lambs (DOC, NZDA).', waterTxt: 'Strongly tied to water and wallows, especially in warm weather.',
+    signs: ['Fresh rooting (turned soil, still damp, with crisp edges); uprooted bracken and Astelia', 'Wallows and mud rubs on trees and posts near water', 'Cloven prints with dew-claw marks in soft ground', 'Fresh droppings and nest beds of bent fern or grass in thick cover', 'Tusk marks on trees (boars)'],
     tips: ['Poor eyesight but acute hearing and smell: hunt upwind and quietly (DOC)', 'Overcast, lightly rainy days: check open areas for feeding pigs at any time (DOC)', 'No dogs? Puketi-type forests where dogs aren’t always needed suit stalking (DOC)', 'Calibre .270 and above recommended for boars (DOC)']
   },
   tahr: {
-    name: 'Tahr', rut: { from: [5, 15], to: [7, 15], label: 'the rut' },
+    name: 'Tahr', rut: { from: [5, 25], to: [7, 15], label: 'the rut' },
     veg: { feed: { open: 1, scatter: 0.8, scrub: 0.6, native: 0.2, exotic: 0, swamp: 0.2, rock: 0.55, ice: 0.05, water: 0, sand: 0 }, bed: { open: 0.5, scatter: 0.7, scrub: 0.8, native: 0.4, exotic: 0, swamp: 0, rock: 0.9, ice: 0.05, water: 0, sand: 0 } },
     slope: { feed: [15, 25, 50, 65], bed: [25, 35, 60, 75] }, edge: { feed: 300, bed: 300 }, water: 1500, disturb: 600, tpi: { feed: 0.3, bed: 0.6 },
     warm: { summer: -0.2, autumn: 0.5, winter: 1, spring: 0.7 }, elev: { summer: 0.8, autumn: 0.7, winter: 0.55, spring: 0.6 },
     w: { veg: 1.4, slope: 1.5, edge: 0.3, water: 0, disturb: 0.8, warm: 1.4, elev: 1.2, slip: 0.4, tpi: 0.6, cliff: 1.5, shelter: 1 },
     schedule: deerSchedule(0.25),
-    doing: { summer: 'High on alpine grasslands and bluffs; feeding early and late, resting on ledges midday.', autumn: 'Bulls start joining nannies on bluff systems.', winter: 'Rut late May–July. Bulls with nannies on sunny bluff faces and snow-tussock below them.', spring: 'Fresh growth on sunny faces lower down.', rut: 'Bulls are with nannies and less cautious; prime winter coats May–August.' },
-    diet: 'Alpine grasses, snow tussock, herbs and subalpine shrubs.', waterTxt: 'Not a limiting factor in the alps.',
+    doing: { summer: 'Bachelor bulls roam widely; nanny–kid groups on the bluffs. They come off the bluffs in late afternoon to graze and climb back in the morning.', autumn: 'Bulls start joining nannies on bluff systems; manes growing.', winter: 'Rut late May to mid-July. Heavy snow pushes them onto bare bluffs and scrub; otherwise sunny bluff faces and the tussock below.', spring: 'The thaw draws herds down to lower faces for new growth.', rut: 'Bulls posture and curl their lips beside the nannies and are less cautious; manes peak May–August.' },
+    diet: 'Snow tussock, subalpine shrubs, mountain daisies and herbs such as Mount Cook lily. Heavy feeding strips tussock to turf.', waterTxt: 'Not a limiting factor in the alps.',
     signs: ['Groups of nannies and kids on bluff faces (bulls nearby in the rut)', 'Pellet piles on ledges and under overhangs', 'Worn trails across scree and bluffs'],
-    tips: ['Glass sunny bluff faces at first light from the opposite side of the valley', 'They watch downhill; getting above them helps', 'Alpine terrain kills. Plan for weather and avalanche risk.']
+    tips: ['Legal feral range: Rakaia and Whitcombe south to Lake Hāwea and the Young Range', 'Glass the bluff bases in late afternoon, and sunny bluff faces at first light, from the opposite side of the valley', 'They watch downhill; getting above them helps', 'Alpine terrain kills. Plan for weather and avalanche risk.']
   },
   chamois: {
     name: 'Chamois', rut: { from: [5, 5], to: [6, 15], label: 'the rut' },
@@ -181,7 +181,31 @@ window.BEHAVIOUR = {
     },
     diet: 'Alpine grasses, herbs and shrubs.', waterTxt: 'Not a limiting factor.',
     signs: ['The dark face band against a pale face gives them away when glassing (DOC)', 'Animals sitting on spurs and outcrops looking downhill', 'Pellets and tracks on scree and snow'],
-    tips: ['They watch downhill and rarely look up. Approach from above (DOC)', 'They often avoid areas where tahr are feeding (DOC)', 'West Coast: check slips, creek beds and rocky outcrops lower down (DOC)']
+    tips: ['They watch downhill and rarely look up. Approach from above (DOC)', 'Alarmed chamois bolt up and across ridges; a chamois standing still is usually already watching you', 'DOC suggests .223 under 200 m, or a flat-shooting .243+ for longer shots', 'They often avoid areas where tahr are feeding (DOC)', 'West Coast: check slips, creek beds and rocky outcrops lower down (DOC)']
+  },
+  bennetts: {
+    name: 'Bennett’s wallaby', rut: null,
+    veg: { feed: { open: 1, scatter: 0.9, scrub: 0.55, native: 0.35, exotic: 0.4, swamp: 0.4, rock: 0.1, ice: 0, water: 0, sand: 0.1 }, bed: { open: 0.1, scatter: 0.6, scrub: 1, native: 0.85, exotic: 0.9, swamp: 0.3, rock: 0.2, ice: 0, water: 0, sand: 0 } },
+    slope: { feed: [0, 0, 25, 40], bed: [3, 8, 35, 45] }, edge: { feed: 120, bed: 150 }, water: 900, disturb: 300, tpi: { feed: 0, bed: 0.1 },
+    warm: { summer: -0.2, autumn: 0.4, winter: 0.9, spring: 0.5 }, elev: { summer: 0.5, autumn: 0.45, winter: 0.4, spring: 0.4 },
+    w: { veg: 1.6, slope: 0.8, edge: 1.6, water: 0.1, disturb: 0.6, warm: 1, elev: 0.3, slip: 0, tpi: 0.3, cliff: 0, shelter: 0.8 },
+    schedule: { summer: { dawn: 0.6, day: 0.05, dusk: 1, night: 1 }, autumn: { dawn: 0.6, day: 0.1, dusk: 1, night: 1 }, winter: { dawn: 0.6, day: 0.3, dusk: 1, night: 0.9 }, spring: { dawn: 0.7, day: 0.15, dusk: 1, night: 1 } },
+    doing: { summer: 'Nocturnal and solitary. Lie up in thick scrub, bush or pine by day; come out at dusk onto pasture and tussock edges.', autumn: 'As summer; feeding from early evening.', winter: 'More daytime feeding in sunny clearings; pull Celmisia (cotton daisy) leaves, eat the soft base and drop the rest.', spring: 'Peak visibility on new grass at the scrub edge.', rut: '' },
+    diet: 'Pasture, lucerne, tussock, native shrubs and seedlings; cotton daisy bases in winter.', waterTxt: 'Not a strong draw.',
+    signs: ['Paired, Y-shaped prints about 10 × 5 cm with a tail drag; leaps over 2 m', 'Fibrous pellets 2.5–3 × 1.5 cm, often joined on lucerne', 'Bare, worn pad runs from scrub into clearings', 'Celmisia leaves bitten off at the base and discarded'],
+    tips: ['Range centred on the Hunter Hills near Waimate (~300,000 ha), Kirkliston Range and South Canterbury', 'DOC: watch pad runs into pasture or tussock clearings from early evening rather than stalking', 'On DOC land you can only shoot in daylight (no spotlights or night-vision). Night shooting is for private land with permission', 'Aim for the upper body; a squatting wallaby shows mostly gut and hindquarters. DOC suggests .222 or .243']
+  },
+  dama: {
+    name: 'Dama & parma wallabies', rut: null,
+    veg: { feed: { open: 1, scatter: 0.9, scrub: 0.6, native: 0.45, exotic: 0.5, swamp: 0.4, rock: 0.05, ice: 0, water: 0, sand: 0.1 }, bed: { open: 0.1, scatter: 0.6, scrub: 1, native: 0.9, exotic: 0.95, swamp: 0.3, rock: 0.1, ice: 0, water: 0, sand: 0 } },
+    slope: { feed: [0, 0, 22, 35], bed: [0, 5, 30, 40] }, edge: { feed: 90, bed: 120 }, water: 900, disturb: 300, tpi: { feed: 0, bed: -0.1 },
+    warm: { summer: -0.2, autumn: 0.3, winter: 0.9, spring: 0.5 }, elev: { summer: 0.4, autumn: 0.4, winter: 0.35, spring: 0.35 },
+    w: { veg: 1.6, slope: 0.6, edge: 1.8, water: 0.1, disturb: 0.6, warm: 1, elev: 0.2, slip: 0, tpi: 0.3, cliff: 0, shelter: 0.8 },
+    schedule: { summer: { dawn: 0.6, day: 0.05, dusk: 1, night: 1 }, autumn: { dawn: 0.6, day: 0.1, dusk: 1, night: 1 }, winter: { dawn: 0.6, day: 0.35, dusk: 1, night: 0.9 }, spring: { dawn: 0.7, day: 0.15, dusk: 1, night: 1 } },
+    doing: { summer: 'Small groups (parma mostly alone) lying up in dense bush, scrub or pines by day; out at dusk to feed on pasture edges.', autumn: 'As summer.', winter: 'After cold rain they sit out in sunny canopy gaps to dry. Glass those gaps.', spring: 'New grass on edges brings them out earlier.', rut: '' },
+    diet: 'Pasture, native shrubs and forest seedlings at the bush edge.', waterTxt: 'Not a strong draw.',
+    signs: ['Paired Y-shaped prints about 8 × 5 cm', 'Pellets about 2 cm, square-flat or pear-shaped (dama); tear-drop (parma)', 'Root scratchings and ragged tears on seedlings', 'Worn pad runs into pasture'],
+    tips: ['Mostly around the Rotorua lakes (Lake Tarawera); parma are limited to the same area', 'Live wallabies can’t be possessed in the Waikato, and dama sightings there must be reported to the council', 'Stake out pad runs into pasture from early evening; daylight only on DOC land', 'DOC suggests .222 or .243']
   }
 };
 window.BEHAVIOUR_THERMALS = THERMALS;
