@@ -7,26 +7,15 @@
   "features": 1,
   "source": "Greater Wellington Regional Council: Cook Strait Cable Protection Zone"
  },
- "depth": {
-  "error": "Remote end closed connection without response"
- },
- "fma": {
-  "error": "Remote end closed connection without response"
- },
- "restrictions": {
-  "error": "Remote end closed connection without response"
+ "depth_layers": [],
+ "fma_niwa": {
+  "error": "{'code': 404, 'message': 'Service Fisheries_Management_Areas___FMAs/MapServer not found ', 'details': []}"
  },
  "slipways": {
   "features": 46,
   "source": "\u00a9 OpenStreetMap contributors (ODbL)"
  },
- "tide Mana Marina 2026.csv": 19533,
- "tide Mana Marina 2027.csv": 19487,
- "tide Mana Marina 2028.csv": 19549,
- "tide Port Taranaki 2026.csv": 19499,
- "tide Port Taranaki 2027.csv": 19489,
- "tide Port Taranaki 2028.csv": 19551,
- "_fetched": "2026-11-28T04:00:03.308319+00:00",
+ "_fetched": "2026-11-28T04:03:06.559276+00:00",
  "_bbox": [
   174.5,
   -41.4,
