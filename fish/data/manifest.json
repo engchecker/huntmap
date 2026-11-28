@@ -7,8 +7,26 @@
   "features": 1,
   "source": "Greater Wellington Regional Council: Cook Strait Cable Protection Zone"
  },
+ "niwa_bathy_meta_keys": [
+  "error"
+ ],
+ "niwa_bathy_error": {
+  "code": 404,
+  "message": "Service Bathymetry/MapServer not found ",
+  "details": []
+ },
  "niwa_bathy_layers": [],
- "depth_layers": [],
+ "deptharea": {
+  "features": 677,
+  "source": "DOC SeaSketch: Bathymetry (depth) areas from LINZ nautical charts"
+ },
+ "depth_niwa250": {
+  "features": 88,
+  "source": "NIWA bathymetry model contours (250 m grid)"
+ },
+ "depth_layers": [
+  "depth_niwa250"
+ ],
  "fma": {
   "features": 3,
   "source": "MPI FMA general regions via NIWA"
@@ -17,7 +35,7 @@
   "features": 46,
   "source": "\u00a9 OpenStreetMap contributors (ODbL)"
  },
- "_fetched": "2026-11-28T04:07:34.860750+00:00",
+ "_fetched": "2026-11-28T04:09:25.822661+00:00",
  "_bbox": [
   174.5,
   -41.4,
