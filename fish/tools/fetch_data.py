@@ -97,7 +97,9 @@ NIWA = 'https://gis.niwa.co.nz/server/rest/services/'
 def niwa_depth():
     # NIWA's Bathymetry service holds LINZ chart depth contours at several scales; keep every
     # polyline contour layer that has features here, and record which layers were used.
-    meta = json.loads(get(NIWA + 'Bathymetry/MapServer/layers?f=json'))
+    meta = json.loads(get(NIWA + 'Bathymetry/MapServer?f=json'))
+    log['niwa_bathy_meta_keys'] = list(meta.keys())[:20]
+    if 'error' in meta: log['niwa_bathy_error'] = meta['error']
     used = []
     log['niwa_bathy_layers'] = [(L.get('id'), L.get('name'), L.get('geometryType')) for L in meta.get('layers', [])]
     for L in meta.get('layers', []):
@@ -111,6 +113,19 @@ def niwa_depth():
                 save(nm, fs, 'NIWA Bathymetry / ' + L['name'] + ' :: ' + L.get('description', '')[:300])
                 used.append(nm)
         tryit(nm, go)
+    # DOC SeaSketch: depth areas compiled from LINZ charts at 1:22,000 to 1:500,000
+    def ss():
+        fs = query('https://seasketch.doc.govt.nz/arcgis/rest/services/National/Our_Estuaries/MapServer/82', simplify=0.0001)
+        if fs:
+            save('deptharea', fs, 'DOC SeaSketch: Bathymetry (depth) areas from LINZ nautical charts')
+    tryit('deptharea', ss)
+    # NIWA 250 m bathymetry model contours (coarse, offshore)
+    def niwa250():
+        fs = query(NIWA + 'WFS/Environmental/MapServer/0', simplify=0.0002)
+        if fs:
+            save('depth_niwa250', fs, 'NIWA bathymetry model contours (250 m grid)')
+            used.append('depth_niwa250')
+    tryit('depth_niwa250', niwa250)
     log['depth_layers'] = used
 
 
