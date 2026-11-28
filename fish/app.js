@@ -229,7 +229,8 @@ function verdictHtml(z) {
   if (h.some(x => x.kind === 'reserve')) return `<div class="verdict v-no"><div><b>Marine reserve: no fishing</b><span>${esc(h.find(x => x.kind === 'reserve').name)}. No fishing of any kind and no taking of any marine life. Transit only, with gear stowed.</span></div></div>`;
   if (h.some(x => x.kind === 'cpz')) return `<div class="verdict v-no"><div><b>Cable zone: no fishing or anchoring</b><span>Cook Strait Cable Protection Zone. Applies to every vessel. Fines up to $100,000.</span></div></div>`;
   if (h.some(x => x.kind === 'handline')) { const x = h.find(x => x.kind === 'handline'); return `<div class="verdict v-restricted"><div><b>Hand-held line only</b><span>${esc(x.text)}</span></div></div>`; }
-  return `<div class="verdict v-ok"><div><b>Open to recreational fishing</b><span>Central area limits apply. No set nets within 4 nautical miles of the coast.</span></div></div>`;
+  const harbour = p[0] > 174.81 && p[1] < -41.2 && p[1] > -41.345;   // inside Wellington Harbour (outside the west-coast set-net zone)
+  return `<div class="verdict v-ok"><div><b>Open to recreational fishing</b><span>Central area limits apply. ${harbour ? 'Wellington Harbour: keep out of the shipping channel, and check the NZ Fishing Rules app before setting a net.' : 'No set nets within 4 nautical miles of the coast.'}</span></div></div>`;
 }
 function bluecodTxt(p) {
   const f = fmaAt(p);
@@ -496,19 +497,21 @@ function catchList() {
 // Scores each spot (and each species there) for a chosen time on: season, depth, tide state, light,
 // forecast wind and swell (allowing for shelter), and distance from a launch. A guide built from rules of thumb.
 const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-let wxCache = null;
-async function regionForecast() {
-  if (wxCache && Date.now() - wxCache.at < 30 * 60000) return wxCache;
+// Two forecast points: the west coast (Mana–Kāpiti) and Wellington Harbour / south coast
+const WX_PTS = { west: { w: [174.85, -41.0], m: [174.72, -41.0] }, south: { w: [174.83, -41.3], m: [174.8, -41.4] } };
+const wxCache = {};
+const wxKey = p => p[1] < -41.2 ? 'south' : 'west';
+async function regionForecast(key = 'west') {
+  const c = wxCache[key]; if (c && Date.now() - c.at < 30 * 60000) return c;
   if (!online()) return null;
-  const q = 'timezone=UTC&forecast_days=7';
+  const q = 'timezone=UTC&forecast_days=7', P = WX_PTS[key];
   try {
     const [w, m] = await Promise.all([
-      fetchT(meteoURL(`latitude=-41.00&longitude=174.85&${q}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn`), 15000).then(r => r.json()),
-      fetchT(marineURL(`latitude=-41.00&longitude=174.72&${q}&hourly=wave_height,swell_wave_height,swell_wave_direction`), 15000).then(r => r.json()).catch(() => null)
+      fetchT(meteoURL(`latitude=${P.w[1]}&longitude=${P.w[0]}&${q}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn`), 15000).then(r => r.json()),
+      fetchT(marineURL(`latitude=${P.m[1]}&longitude=${P.m[0]}&${q}&hourly=wave_height,swell_wave_height,swell_wave_direction`), 15000).then(r => r.json()).catch(() => null)
     ]);
     const t = w.hourly.time.map(x => Date.parse(x + 'Z'));
-    wxCache = { at: Date.now(), t, ws: w.hourly.wind_speed_10m, wd: w.hourly.wind_direction_10m, wg: w.hourly.wind_gusts_10m, wv: m && m.hourly ? m.hourly.wave_height : null, sw: m && m.hourly ? m.hourly.swell_wave_height : null, sd: m && m.hourly ? m.hourly.swell_wave_direction : null };
-    return wxCache;
+    return (wxCache[key] = { at: Date.now(), t, ws: w.hourly.wind_speed_10m, wd: w.hourly.wind_direction_10m, wg: w.hourly.wind_gusts_10m, wv: m && m.hourly ? m.hourly.wave_height : null, sw: m && m.hourly ? m.hourly.swell_wave_height : null, sd: m && m.hourly ? m.hourly.swell_wave_direction : null });
   } catch { return null; }
 }
 function wxAt(wx, when) {
@@ -521,7 +524,7 @@ function tideState(ev, when) {
   const prev = ev[i - 1], next = ev[i], toChange = Math.min(when - prev.t, next.t - when);
   return { prev, next, toChange, rising: next.h > prev.h };
 }
-function scoreSpot(s, sp, when, mode, wx, tideEv) {
+function scoreSpot(s, sp, when, mode, wx, tideEv, from) {
   const why = [], warn = [];
   const M = F.model[sp]; if (!M) return null;
   const mon = +new Intl.DateTimeFormat('en-NZ', { timeZone: TZ, month: 'numeric' }).format(when) - 1;
@@ -556,7 +559,7 @@ function scoreSpot(s, sp, when, mode, wx, tideEv) {
   if (w) {
     const dir = compass(w.wd), sheltered = (s.shelter || []).includes(dir), eff = w.ws * (sheltered ? 0.45 : 1), gust = w.wg * (sheltered ? 0.5 : 1);
     const swellExposed = w.sd == null ? true : !(s.shelter || []).includes(compass(w.sd));
-    const swell = w.sw != null ? w.sw * (swellExposed ? 1 : 0.4) : null;
+    const swell = w.sw != null ? w.sw * (swellExposed ? 1 : 0.4) * (s.harbour ? 0.2 : 1) : null;   // the inner harbour is sheltered from ocean swell
     if (dive) weather = (swell == null || swell < 0.8) && eff < 15 ? 1 : (swell == null || swell < 1.2) && eff < 20 ? 0.4 : 0;
     else if (mode === 'kayak') weather = eff < 8 && gust < 14 && (swell == null || swell < 0.8) ? 1 : eff < 11 ? 0.35 : 0;
     else if (mode === 'boat') weather = eff < 12 && gust < 20 && (swell == null || swell < 1.5) ? 1 : eff < 18 && gust < 25 ? 0.45 : 0.05;
@@ -568,8 +571,9 @@ function scoreSpot(s, sp, when, mode, wx, tideEv) {
   // travel from the nearest launch (boats and kayaks)
   let travel = 1;
   if (mode !== 'shore' && !(dive && s.shore)) {
-    const r = nearest(s.p, F.ramps)[0], km = r ? r.dist / 1000 : 99;   // named launches only
+    const r = from ? { ...from, dist: distM(from.p, s.p) } : nearest(s.p, F.ramps)[0], km = r ? r.dist / 1000 : 99;   // chosen or nearest named launch
     if (mode === 'kayak' && km > 2.5) return null;
+    if (from && km > 25) return null;
     travel = km < 5 ? 1 : km < 12 ? 0.9 : 0.8;
     why.push(`${km.toFixed(km < 10 ? 1 : 0)} km from ${r.n.replace(/ \(.*\)/, '')}`);
   }
@@ -580,8 +584,8 @@ function scoreSpot(s, sp, when, mode, wx, tideEv) {
   const score = season * depthS * light * tide * weather * travel;
   return { s, sp, score, why, warn, w };
 }
-async function recommend(when, mode, target) {
-  const wx = await regionForecast();
+async function recommend(when, mode, target, from) {
+  const wxs = { west: await regionForecast('west'), south: await regionForecast('south') };
   const tides = {};
   const results = [];
   for (const s of F.spots) {
@@ -590,10 +594,11 @@ async function recommend(when, mode, target) {
     const st = nearestStation(s.p); if (!tides[st.n]) tides[st.n] = await stationEvents(st);
     let sps = mode === 'dive' ? ['Crayfish'] : s.sp.filter(x => mode !== 'shore' || x !== 'Crayfish');
     if (target !== 'Any') sps = sps.filter(x => x === target);
-    const rs = sps.map(sp => scoreSpot(s, sp, when, mode, wx, tides[st.n])).filter(Boolean).sort((a, b) => b.score - a.score);
+    const wx = wxs[wxKey(s.p)];
+    const rs = sps.map(sp => scoreSpot(s, sp, when, mode, wx, tides[st.n], from)).filter(Boolean).sort((a, b) => b.score - a.score);
     if (rs.length) { const best = rs[0]; best.also = rs.slice(1).filter(x => x.score >= best.score * 0.85).map(x => x.sp).slice(0, 2); results.push(best); }
   }
-  return { results: results.sort((a, b) => b.score - a.score), wx: !!wxAt(wx, when) };
+  return { results: results.sort((a, b) => b.score - a.score), wx: !!(wxAt(wxs.west, when) || wxAt(wxs.south, when)) };
 }
 const PLAN_TIMES = [['best', 'Best time that day'], ['dawn', 'Dawn'], ['morning', 'Morning (9 am)'], ['midday', 'Midday'], ['afternoon', 'Afternoon (3 pm)'], ['dusk', 'Dusk'], ['night', 'Night (10 pm)'], ['custom', 'A set time']];
 function planSheet() {
@@ -606,6 +611,7 @@ function planSheet() {
     <div class="pair"><div><label class="field-l">Day</label><input type="date" id="plDay" value="${today}" min="${today}"></div>
     <div><label class="field-l">When</label><select id="plTime">${PLAN_TIMES.map(([k, l]) => `<option value="${k}" ${pr.time === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
     <div id="plCustomBox" ${pr.time === 'custom' ? '' : 'hidden'}><label class="field-l">Time</label><input type="time" id="plCustom" value="${pr.custom || '06:00'}"></div>
+    <label class="field-l">Launching from</label><select id="plFrom"><option value="">Nearest ramp to each spot</option>${F.ramps.map(r => `<option ${pr.from === r.n ? 'selected' : ''}>${esc(r.n)}</option>`).join('')}</select>
     <label class="field-l">Target species</label><select id="plSp"><option>Any</option>${spp.map(k => `<option ${pr.sp === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select>
     <div class="btnrow"><button class="btn" data-act="planGo">Recommend spots</button></div>
     <div id="plOut"></div>`, { tall: true, kind: 'plan' });
@@ -622,8 +628,9 @@ function whenFor(day, key, custom, p) {
   return null;
 }
 const planGo = async () => {
-  const mode = $('#plMode .on').dataset.v, key = $('#plTime').value, sp = $('#plSp').value, day = $('#plDay').value, custom = $('#plCustom').value;
-  LS.set('plan', { mode, time: key, sp, custom });
+  const mode = $('#plMode .on').dataset.v, key = $('#plTime').value, sp = $('#plSp').value, day = $('#plDay').value, custom = $('#plCustom').value, fromN = $('#plFrom').value;
+  LS.set('plan', { mode, time: key, sp, custom, from: fromN });
+  const from = mode === 'shore' || (mode === 'dive') ? null : F.ramps.find(r => r.n === fromN) || null;
   const out = $('#plOut'); out.innerHTML = '<p>Working it out…</p>';
   const centre = [174.85, -41.0];
   let when = whenFor(day, key, custom, centre), res, rolled = false;
@@ -631,7 +638,7 @@ const planGo = async () => {
     const [y, mo, d] = day.split('-').map(Number); let top = null;
     for (let h = 4; h <= 22; h += 0.5) {
       const t = nzDate(y, mo, d, Math.floor(h), h % 1 ? 30 : 0); if (+t < Date.now() - 1800e3) continue;
-      const r = await recommend(t, mode, sp); const sc = r.results.slice(0, 3).reduce((a, x) => a + x.score, 0);
+      const r = await recommend(t, mode, sp, from); const sc = r.results.slice(0, 3).reduce((a, x) => a + x.score, 0);
       if (r.results.length && (!top || sc > top.sc)) top = { sc, r, t };
     }
     if (!top) { out.innerHTML = '<p>That day has passed or nothing suits. Try another day.</p>'; return; }
@@ -640,7 +647,7 @@ const planGo = async () => {
     if (+when < Date.now() - 3600e3) {   // today's time has gone: use the same time tomorrow
       const nd = nzDayKey(new Date(+nzDate(...day.split('-').map(Number), 12, 0) + 864e5)); when = whenFor(nd, key, custom, centre); rolled = true; $('#plDay').value = nd;
     }
-    res = await recommend(when, mode, sp);
+    res = await recommend(when, mode, sp, from);
   }
   const top = res.results.slice(0, 3);
   if (!top.length) { out.innerHTML = `<p class="warnbox">No spot suits ${mode === 'kayak' ? 'a kayak' : mode === 'dive' ? 'diving' : 'that'} for ${sp === 'Any' ? 'any species' : sp} then. Try shore fishing, another species or another time.</p>`; return; }
@@ -666,9 +673,20 @@ function spotSheet(i) {
     <p class="sub">Indicative position from ${esc(s.src)}. Use your sounder and the depth contours to find the fish.</p>
     <div class="btnrow"><button class="btn" data-act="idHere" data-lng="${s.p[0]}" data-lat="${s.p[1]}">What applies here</button><button class="btn ghost" data-act="tidesAt" data-lng="${s.p[0]}" data-lat="${s.p[1]}">Tides</button><button class="btn ghost" data-act="condAt" data-lng="${s.p[0]}" data-lat="${s.p[1]}">Wind &amp; waves</button></div>`, { kind: 'spot' });
 }
+function guideHtml(g) {
+  const sec = (h, a) => a && a.length ? `<h3>${h}</h3><ul>${a.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+  return sec('The ramp', g.ramp) + sec('Heading out', g.out) + sec('Radio', g.radio) + sec('Where to go', g.trips) + sec('Fishing rules here', g.fishing);
+}
+function guideSheet(key) {
+  const g = F.guides[key], r = F.ramps.find(x => x.guide === key);
+  showSheet(`<h2>⚓ ${esc(g.title)}</h2>${guideHtml(g)}
+    <div class="btnrow">${r ? `<a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${r.p[1]},${r.p[0]}&travelmode=driving" target="_blank" rel="noopener">Drive there</a><button class="btn ghost" data-act="planFrom" data-g="${key}">Where to fish from here</button><button class="btn ghost" data-act="condAt" data-lng="${r.p[0]}" data-lat="${r.p[1]}">Wind &amp; waves</button><button class="btn ghost" data-act="tidesAt" data-lng="${r.p[0]}" data-lat="${r.p[1]}">Tides</button>` : ''}</div>
+    <p class="sub">From Seaview Marina, Greater Wellington’s skipper’s guide and Coastguard Wellington, checked 28 November 2026.</p>`, { tall: true, kind: 'guide' });
+}
 function rampSheet(i) {
   const r = rampList()[i];
-  showSheet(`<h2>⚓ ${esc(r.n)}</h2>${r.note ? `<p>${esc(r.note)}</p>` : ''}<p class="sub">${llTxt(r.p)}${r.osm ? ' · from OpenStreetMap' : ''}</p>
+  if (r.guide) { guideSheet(r.guide); return; }
+  showSheet(`<h2>⚓ ${esc(r.n)}</h2>${r.note ? `<p>${esc(r.note)}</p>` : ''}<p class="sub">${llTxt(r.p)}${r.osm ? ' · from OpenStreetMap' : r.approx ? ' · approximate position' : ''}</p>
     <div class="btnrow"><a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${r.p[1]},${r.p[0]}&travelmode=driving" target="_blank" rel="noopener">Drive (Google)</a><a class="btn ghost" href="https://maps.apple.com/directions?destination=${r.p[1]},${r.p[0]}&mode=driving" target="_blank" rel="noopener">Drive (Apple)</a><button class="btn ghost" data-act="condAt" data-lng="${r.p[0]}" data-lat="${r.p[1]}">Wind &amp; waves</button></div>`, { kind: 'ramp' });
 }
 function rulesSheet() {
@@ -700,6 +718,7 @@ function layersSheet() {
 function menuSheet() {
   showSheet(`<h2>Fish Access NZ</h2><div class="menu">
     <button data-act="plan"><span>🧭</span><span>Where should I fish?<small>Best spots for your time, boat or shore</small></span></button>
+    <button data-act="guide" data-g="seaview"><span>⚓</span><span>Launching from Seaview<small>Ramp, harbour rules, radio, where to go</small></span></button>
     <button data-act="tides"><span>🌊</span><span>Tides &amp; fishing windows<small>LINZ predictions, tide changes, dawn and dusk</small></span></button>
     <button data-act="cond"><span>💨</span><span>Wind &amp; waves<small>3-day forecast for the selected spot</small></span></button>
     <button data-act="rules"><span>📏</span><span>Rules &amp; limits<small>Sizes, bag limits, closed areas</small></span></button>
@@ -731,7 +750,7 @@ function closeSheet() { sheet.hidden = true; sheetKind = ''; }
 $('#sheetClose').onclick = closeSheet;
 const P = b => [+b.dataset.lng, +b.dataset.lat];
 const actions = {
-  closeSheet, plan: planSheet, planGo, planShow, tides: () => tideSheet(), cond: () => condSheet(), rules: rulesSheet, safety: safetySheet, about: aboutSheet, marks: marksList, catchList,
+  closeSheet, plan: planSheet, guide: b => guideSheet(b.dataset.g), planFrom: b => { const r = F.ramps.find(x => x.guide === b.dataset.g); map.easeTo({ center: r.p, zoom: 11.5 }); LS.set('plan', Object.assign(LS.get('plan', {}), { from: r.n, mode: 'boat' })); planSheet(); }, planGo, planShow, tides: () => tideSheet(), cond: () => condSheet(), rules: rulesSheet, safety: safetySheet, about: aboutSheet, marks: marksList, catchList,
   catchNew: () => catchForm(), catchAtMark: b => catchForm(null, b.dataset.id), spot: b => spotSheet(+b.dataset.i),
   idHere: b => { const p = P(b); map.easeTo({ center: p, zoom: Math.max(map.getZoom(), 12) }); identify(p); },
   tidesAt: b => tideSheet(P(b)), condAt: b => condSheet(P(b)),
@@ -791,7 +810,7 @@ window.addEventListener('online', net); window.addEventListener('offline', net);
 function welcome() {
   showSheet(`<h2>Fish Access NZ</h2><p>Tap anywhere on the water to see what you can do there, the tide and nearby spots.</p>
     <ul class="sub"><li><b>Red</b>: Kāpiti Marine Reserve, no fishing</li><li><b>Purple</b>: Cook Strait cable zone, no fishing or anchoring</li><li><b>Amber</b>: Pukerua Bay, hand-held line only</li><li><b>Blue lines</b>: depth contours · <b>grey dashes</b>: where the blue cod limit changes</li><li>🐟 boat spots · 🎣 shore spots · 🦞 crayfish dive spots · ⚓ ramps</li><li><b>📍 button</b>: mark where you are and log what you catch there</li></ul>
-    <p class="sub">Tap the compass button for <b>Where should I fish?</b>: the best spots for the time you want to go. Turn on the location button for live boundary alerts on the water. Currently covers Mana to Kāpiti.</p>
+    <p class="sub">Tap the compass button for <b>Where should I fish?</b>: the best spots for the time you want to go. Turn on the location button for live boundary alerts on the water. Covers Ōtaki to Wellington Harbour and the south coast. Launching from Seaview? See ••• → Launching from Seaview.</p>
     <p class="sub">A planning aid, not a chart. Check the NZ Fishing Rules app for the legal rules.</p>
     <div class="btnrow"><button class="btn" data-act="welcomeOk">Got it</button></div>`, { tall: true, kind: 'welcome' });
 }

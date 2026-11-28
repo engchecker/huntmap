@@ -5,6 +5,7 @@
    - Fisheries (Amateur Fishing) Regulations 2013, regs 88, 90, 91 and Schedule 15
    Rules change. The app always points people to MPI's NZ Fishing Rules app as the legal source. */
 window.FISH = {
+  region: 'Mana · Kāpiti · Wellington',
   checked: '28 November 2026',
   area: 'Central fishery management area',
 
@@ -84,7 +85,17 @@ window.FISH = {
     { n: 'Mākara coast', shelter: ['N', 'NE', 'E'], p: [174.705, -41.215], sp: ['Snapper', 'Blue cod', 'Blue moki', 'Butterfish', 'Crayfish'], when: 'Big snapper in summer; crays year-round', how: 'Kayak and small-boat spot in calm weather. The Cook Strait cable zone starts further south: no fishing or anchoring there.', src: 'fishing.net.nz / anglersplanet reports' },
     { n: 'Mana Island – western reef', shelter: ['E', 'NE', 'SE'], dive: true, p: [174.774, -41.083], sp: ['Crayfish', 'Blue moki', 'Butterfish', 'Blue cod'], when: 'Calm days with easterly or no swell', how: 'Kelp-covered reef in 3–15 m. Dive or set pots along the edge. Don’t land on the island: it’s a DOC scientific reserve.', src: 'Local dive reports' },
     { n: 'Plimmerton reef', shelter: ['E', 'NE', 'SE'], dive: true, shore: true, p: [174.851, -41.077], sp: ['Crayfish', 'Butterfish', 'Blue moki'], when: 'Calm days, good visibility', how: 'Shore dive from the rocks south of the boat ramp. Crays hide in ledges in 3–10 m. Visibility drops for days after heavy rain.', src: 'Local dive reports' },
-    { n: 'Titahi Bay – southern rocks', shelter: ['E', 'NE', 'SE', 'N'], dive: true, shore: true, p: [174.8235, -41.1065], sp: ['Crayfish', 'Butterfish', 'Blue moki', 'Kahawai'], when: 'Calm days, good visibility', how: 'Shore dive or snorkel off the rocks at the southern end of the bay in 3–10 m.', src: 'Local dive reports' }
+    { n: 'Titahi Bay – southern rocks', shelter: ['E', 'NE', 'SE', 'N'], dive: true, shore: true, p: [174.8235, -41.1065], sp: ['Crayfish', 'Butterfish', 'Blue moki', 'Kahawai'], when: 'Calm days, good visibility', how: 'Shore dive or snorkel off the rocks at the southern end of the bay in 3–10 m.', src: 'Local dive reports' },
+    // Wellington Harbour and south coast (launch from Seaview, Lowry Bay or Eastbourne)
+    { n: 'Mākaro / Ward Island', area: 'harbour', shelter: ['E', 'NE'], harbour: true, p: [174.8795, -41.2805], sp: ['Kingfish', 'Snapper', 'Trevally', 'Gurnard', 'Kahawai'], when: 'Summer to autumn', how: 'Start around the leading light. Trevally south of the island, 100–200 m from the southern beacon: berley is a must. The main shipping channel runs west of the island, so keep out of it and watch for ships.', src: 'fishing.net.nz and Pete Lamb harbour reports' },
+    { n: 'Eastbourne–Ward Island bank', area: 'harbour', shelter: ['E', 'NE', 'SE'], harbour: true, p: [174.889, -41.288], sp: ['Snapper', 'Gurnard', 'Trevally'], when: 'Snapper Oct–May', how: 'Fish the sand with a running rig and berley.', src: 'fishing.net.nz reports' },
+    { n: 'Matiu / Somes Island – southern end', area: 'harbour', shelter: ['N', 'NE'], harbour: true, p: [174.8655, -41.2625], sp: ['Kahawai', 'Snapper', 'Gurnard'], when: 'Summer', how: 'Kahawai work the tide lines around the island. Matiu is a DOC reserve: don’t land without going through DOC.', src: 'fishing.net.nz reports' },
+    { n: 'Point Halswell', area: 'harbour', shelter: ['W', 'SW', 'NW'], harbour: true, p: [174.8305, -41.2815], sp: ['Tarakihi', 'Snapper', 'Kingfish', 'Trevally', 'Blue cod', 'Kahawai'], when: 'Year-round; kingfish in summer', how: 'Fish 15–20 m off the point. Kingfish on live baits or trolled lures.', src: 'Pete Lamb harbour guide' },
+    { n: 'Point Howard wharf', area: 'harbour', shelter: ['E', 'NE', 'N'], harbour: true, shore: true, p: [174.8935, -41.2525], sp: ['Kingfish', 'Kahawai', 'Snapper'], when: 'Summer', how: 'Live baits or lures for kingfish. Close to Seaview.', src: 'Pete Lamb harbour guide' },
+    { n: 'Barrett Reef & harbour entrance', area: 'harbour', shelter: [], current: true, p: [174.8455, -41.333], sp: ['Kingfish', 'Kahawai', 'Blue cod'], when: 'Kingfish in summer', how: 'Kingfish around the reef. The entrance gets dangerous when wind runs against the tide or in a southerly swell. Stay well clear of the breaking reef and out of the shipping channel.', src: 'fishing.net.nz reports' },
+    { n: 'Pencarrow coast', area: 'harbour', shelter: ['E', 'NE', 'N'], p: [174.852, -41.372], sp: ['Kingfish', 'Kahawai', 'Blue moki', 'Crayfish'], when: 'Summer', how: 'Rocky coast outside the eastern head. Exposed to southerly swell.', src: 'fishing.net.nz reports' },
+    { n: 'Airport reef (south coast)', area: 'south', shelter: ['N', 'NE', 'NW'], p: [174.806, -41.358], sp: ['Snapper', 'Tarakihi', 'Blue cod'], when: 'Snapper in summer; reef fish when the swell is low', how: 'Ledger rigs with squid for tarakihi and cod. Taputeranga Marine Reserve is just to the west: check the red boundary.', src: 'fishing.net.nz and Angler’s Planet reports' },
+    { n: 'East of Sinclair Head (35–45 m)', area: 'south', shelter: ['N', 'NE', 'NW'], p: [174.722, -41.375], sp: ['Snapper', 'Tarakihi', 'Blue cod'], when: 'Snapper in summer', how: 'Snapper on the 35–45 m line. A long run from the harbour: only in settled weather. The cable protection zone is further west.', src: 'fishing.net.nz reports' }
   ],
 
   // Seasonal and habitat model for the planner: month weights Jan–Dec (1 = peak), typical depth range (m),
@@ -114,9 +125,46 @@ window.FISH = {
     { n: 'Plimmerton boat ramp', p: [174.8553, -41.0745], note: 'Exposed to westerly swell.' },
     { n: 'Titahi Bay', shelter: ['E', 'NE', 'SE'], p: [174.8334, -41.1024], note: 'Beach launch.' },
     { n: 'Pukerua Bay boat ramp', p: [174.8921, -41.0293], note: 'Small ramp for light trailer boats. Follow the channel through the reef (map at the ramp). Hand-held line only inside the bay.' },
-    { n: 'Paraparaumu Beach', p: [174.9781, -40.9179], note: 'Beach launch; Kāpiti Boating Club runs a tractor launch. Check the club for launching rules.' }
+    { n: 'Paraparaumu Beach', p: [174.9781, -40.9179], note: 'Beach launch; Kāpiti Boating Club runs a tractor launch. Check the club for launching rules.' },
+    { n: 'Seaview Marina', p: [174.902, -41.251], guide: 'seaview', approx: true, note: 'Four-lane all-tide ramp behind a breakwater. Open 24/7. Pay at the gate by card or with an annual pass.' },
+    { n: 'Lowry Bay ramp', p: [174.9135, -41.2595], approx: true, note: 'Public ramp on Marine Drive (Greater Wellington). More exposed than Seaview.' },
+    { n: 'Eastbourne boat ramp', p: [174.9013, -41.286], note: 'Public ramp at Eastbourne, close to Ward Island.' }
   ],
 
+  // Launch guides (shown on the ramp's card and from the menu)
+  guides: {
+    seaview: {
+      title: 'Launching from Seaview',
+      ramp: [
+        'Four-lane concrete ramp usable at all tides, behind a solid breakwater, with three jetties and floating pontoons for loading.',
+        'Open 24/7. The ramp gate takes a credit or debit card, or buy an annual pass from the marina office (04 568 3736).',
+        'About 250 trailer parks. Public toilets at the corner of Port Road and Eastern Bays Marine Drive. Diesel at the fuel dock.',
+        'Rubbish bins by the ramp take boat rubbish only: no fish waste.'
+      ],
+      out: [
+        'Tankers use the Seaview and Burnham wharves next to the marina: keep at least 200 m from any tanker.',
+        'Give way to any ship over 500 tonnes, pass astern of ships and keep out of the shipping channels. Ships can’t see small boats within about 250 m of their bow. Five short blasts means you’re in the way.',
+        '5 knots within 200 m of the shore, a dive flag or a dive boat, and within 50 m of other vessels or swimmers.',
+        'Everyone on a boat under 6 m must wear a lifejacket while underway.',
+        'Going out through the heads at night or in poor visibility: call Wellington Harbour Radio (Beacon Hill) on VHF 14 first, or phone 04 388 1911.',
+        'Boats over 6 m between Ward Island and the entrance must carry chart NZ4633 or an electronic equivalent.'
+      ],
+      radio: [
+        'VHF 16: distress and calling. VHF 14: Beacon Hill (shipping, harbour). VHF 03: Coastguard, Wellington Harbour. VHF 61: Coastguard, Cook Strait. VHF 20: weather nowcasts.'
+      ],
+      fishing: [
+        'The harbour is south of Titahi Bay, so it’s fishery area 2 (Central East) for blue cod: check the limit in the NZ Fishing Rules app. All other Central limits apply.',
+        'Taputeranga Marine Reserve (Island Bay to Ōwhiro Bay) on the south coast is no-take. The Cook Strait cable zone starts west of Sinclair Head.',
+        'Before setting a net in the harbour, check the NZ Fishing Rules app: netting is restricted in parts of the harbour.',
+        'Avoid gathering shellfish in the inner harbour, especially after rain, and check MPI’s biotoxin alerts.'
+      ],
+      trips: [
+        'Straight-line distances from the ramp. Inside the harbour (sheltered in most winds): Point Howard 1 km, Matiu/Somes Island 3 km, Ward Island 4 km, Point Halswell 7 km.',
+        'Outside the heads (further by water): Barrett Reef 10 km, Pencarrow 12 km, Airport reef 14 km, Sinclair Head 20 km.',
+        'The entrance is the hard part. A southerly swell or wind against the tide can make it dangerous when the harbour is calm.'
+      ]
+    }
+  },
   safety: [
     'Coastguard: VHF channel 16, or dial *500 from a mobile. Emergency: 111.',
     'Log a trip report with Coastguard before you go (Coastguard app or VHF).',
@@ -124,6 +172,7 @@ window.FISH = {
     'Porirua Harbour entrance can break on an ebb tide against a westerly swell. Cross on the flood.',
     'The Rauoterangi Channel and around Mana Island run strong tidal currents. Watch your drift near reserve boundaries.',
     'Cook Strait Cable Protection Zone (Mākara to Oteranga Bay and across the strait): no fishing or anchoring for any vessel. Patrol vessel 027 444 2288. Fines up to $100,000.',
+    'Wellington Harbour: Beacon Hill (Wellington Harbour Radio) VHF 14 or 04 388 1911. Coastguard VHF 03 in the harbour, 61 in Cook Strait.',
     'Report poaching: 0800 4 POACHER (0800 476 224). Marine reserve offences: 0800 DOC HOT (0800 362 468).'
   ],
   islands: [
@@ -132,6 +181,7 @@ window.FISH = {
   ],
   tideStations: [
     { n: 'Mana Marina', p: [174.8667, -41.1], src: 'ManaMarina', dt: 0, ratio: 1, mslS: 0, mslR: 0 },
+    { n: 'Wellington', p: [174.7833, -41.2833], src: 'Wellington', dt: 0, ratio: 1, mslS: 0, mslR: 0 },
     // offsets from Port Taranaki (LINZ secondary ports table)
     { n: 'Paraparaumu Beach', p: [174.983, -40.9], src: 'PortTaranaki', dt: -20, ratio: 0.61, mslS: 0.9, mslR: 1.99, approx: true },
     { n: 'Waikanae River entrance', p: [175.0, -40.867], src: 'PortTaranaki', dt: -2, ratio: 0.61, mslS: 0.9, mslR: 1.99 },
