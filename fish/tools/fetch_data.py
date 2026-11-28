@@ -99,8 +99,10 @@ def niwa_depth():
     # polyline contour layer that has features here, and record which layers were used.
     meta = json.loads(get(NIWA + 'Bathymetry/MapServer/layers?f=json'))
     used = []
+    log['niwa_bathy_layers'] = [(L.get('id'), L.get('name'), L.get('geometryType')) for L in meta.get('layers', [])]
     for L in meta.get('layers', []):
-        if L.get('geometryType') != 'esriGeometryPolyline' or 'ontour' not in (L.get('name', '') + L.get('description', '')):
+        txt = (L.get('name', '') + ' ' + L.get('description', '')).lower()
+        if L.get('geometryType') != 'esriGeometryPolyline' or not any(k in txt for k in ('contour', 'depth', 'bathym', 'depcnt')):
             continue
         nm = 'depth_' + str(L['id'])
         def go(L=L, nm=nm):
@@ -113,7 +115,7 @@ def niwa_depth():
 
 
 tryit('depth', niwa_depth)
-tryit('fma_niwa', lambda: save('fma', query(NIWA + 'Fisheries_Management_Areas___FMAs/MapServer/303', simplify=0.0005), 'MPI FMA general regions via NIWA'))
+tryit('fma_niwa', lambda: save('fma', query(NIWA + 'WFS/Fisheries_Management/MapServer/2', simplify=0.0005), 'MPI FMA general regions via NIWA'))
 
 
 def mpi_service(svc, prefix):
