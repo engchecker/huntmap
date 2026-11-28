@@ -32,7 +32,8 @@
   "source": "MPI FMA general regions via NIWA"
  },
  "slipways": {
-  "error": "<urlopen error [Errno 101] Network is unreachable>"
+  "features": 46,
+  "source": "\u00a9 OpenStreetMap contributors (ODbL)"
  },
  "linz_agol_service_count": 77,
  "linz_agol_hydro": [],
@@ -48,7 +49,7 @@
   "features": 521,
   "source": "LINZ Data Service layer 50671 (CC BY 4.0)"
  },
- "_fetched": "2026-11-28T05:01:32.270130+00:00",
+ "_fetched": "2026-11-28T05:04:10.999749+00:00",
  "_bbox": [
   174.5,
   -41.4,
