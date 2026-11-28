@@ -1,4 +1,4 @@
-"""Fetches open data for the fishing map. Run by GitHub Actions (needs internet).
+"""Fetches open data for the fishing map. Run by GitHub Actions (needs internet; LINZ chart layers use the LINZ_LDS_KEY secret).
 Writes GeoJSON/CSV into fish/data/ plus a manifest. Python standard library only."""
 import json, os, time, urllib.request, urllib.parse, datetime
 
