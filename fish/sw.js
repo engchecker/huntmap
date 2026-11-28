@@ -1,5 +1,5 @@
 /* Fish Access NZ service worker: app shell and open data offline, map tiles cached as you view them. */
-const SHELL = 'fish-shell-v3';
+const SHELL = 'fish-shell-v4';
 const RT = 'fish-tiles', RT_MAX = 4000;
 const ASSETS = ['./', 'index.html', 'app.js', 'rules.js', 'fish.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
   '../config.js', '../app.css', '../vendor/maplibre-gl.js', '../vendor/maplibre-gl.css',

@@ -136,7 +136,7 @@ function renderPins() {
   for (const k of Object.keys(markers)) { markers[k].forEach(m => m.remove()); markers[k] = []; }
   if (state.vis.spots) F.spots.forEach((s, i) => markers.spots.push(pin('spot' + (s.dive ? ' dive' : s.shore ? ' shore' : ''), s.dive ? '🦞' : s.shore ? '🎣' : '🐟', s.p, () => spotSheet(i)).addTo(map)));
   if (state.vis.ramps) rampList().forEach((r, i) => markers.ramps.push(pin('ramp', '⚓', r.p, () => rampSheet(i)).addTo(map)));
-  if (state.vis.marks) state.marks.forEach(m => markers.marks.push(pin('mark', '📍', m.p, () => markSheet(m.id)).addTo(map)));
+  if (state.vis.marks) state.marks.forEach(m => { const n = catchesAt(m).reduce((a, c) => a + (c.kept ? c.n : 0), 0); const mk = pin('mark', '📍', m.p, () => markSheet(m.id)); if (n) { const t = document.createElement('i'); t.className = 'cnt'; t.textContent = n; mk.getElement().appendChild(t); } markers.marks.push(mk.addTo(map)); });
 }
 function rampList() {
   // named ramps from rules.js, plus other OpenStreetMap slipways in the region not already listed
@@ -407,14 +407,40 @@ function markForm(p, m) {
     <label class="field-l">Notes (depth, what bit, tide)</label><textarea id="mkNote" rows="3">${esc(m ? m.note : '')}</textarea>
     <div class="btnrow"><button class="btn" data-act="markSave" data-id="${m ? m.id : ''}" data-lng="${p[0]}" data-lat="${p[1]}">Save</button><button class="btn ghost" data-act="closeSheet">Cancel</button></div>`, { kind: 'mark' });
 }
+const catchesAt = m => state.catches.filter(c => c.markId === m.id).sort((a, b) => b.t - a.t);
 function markSheet(id) {
   const m = state.marks.find(x => x.id === id); if (!m) return;
-  const me = state.me && [state.me.lng, state.me.lat];
-  showSheet(`<h2>📍 ${esc(m.name)}</h2><p class="sub">${llTxt(m.p)} · saved ${fmtDay(new Date(m.t))}${me ? ` · ${fmtDist(distM(me, m.p))} ${compass(bearing(me, m.p))}` : ''}</p>${m.note ? `<p>${esc(m.note)}</p>` : ''}
-    <div class="btnrow"><button class="btn" data-act="markInfo" data-id="${m.id}">What applies here</button><button class="btn ghost" data-act="markEdit" data-id="${m.id}">Edit</button><button class="btn ghost" data-act="markDel" data-id="${m.id}">Delete</button></div>`, { kind: 'mark' });
+  const me = state.me && [state.me.lng, state.me.lat], cs = catchesAt(m);
+  const tally = {}; cs.forEach(c => { if (c.kept) tally[c.sp] = (tally[c.sp] || 0) + c.n; });
+  showSheet(`<h2>📍 ${esc(m.name)}</h2><p class="sub">${llTxt(m.p)}${m.acc ? ` (±${Math.round(m.acc)} m)` : ''} · saved ${fmtDay(new Date(m.t))} ${fmtTime(new Date(m.t))}${me ? ` · ${fmtDist(distM(me, m.p))} ${compass(bearing(me, m.p))} of you` : ''}</p>${m.note ? `<p>${esc(m.note)}</p>` : ''}
+    <div class="btnrow"><button class="btn" data-act="catchAtMark" data-id="${m.id}">Add a catch here</button><button class="btn ghost" data-act="markEdit" data-id="${m.id}">Name &amp; notes</button></div>
+    <h3>Caught here</h3>
+    ${Object.keys(tally).length ? `<p>${Object.entries(tally).map(([k, v]) => `<b>${v}</b> ${esc(k)}`).join(' · ')} kept</p>` : ''}
+    <ul class="list">${cs.map(c => `<li><span class="t">${esc(c.sp)} × ${c.n}</span> ${c.kept ? '' : '<span class="badge">released</span>'}${c.len ? ` · ${c.len} ${/crayfish|pāua/i.test(c.sp) ? 'mm' : 'cm'}` : ''}<br><span class="sub">${fmtDay(new Date(c.t))} ${fmtTime(new Date(c.t))}${c.tide ? ' · ' + esc(c.tide) : ''}${c.note ? ' · ' + esc(c.note) : ''}</span></li>`).join('') || '<li class="sub">Nothing logged here yet.</li>'}</ul>
+    <div class="btnrow"><button class="btn ghost small" data-act="markInfo" data-id="${m.id}">What applies here</button><button class="btn ghost small" data-act="tidesAt" data-lng="${m.p[0]}" data-lat="${m.p[1]}">Tides</button><a class="btn ghost small" href="https://www.google.com/maps/dir/?api=1&destination=${m.p[1]},${m.p[0]}" target="_blank" rel="noopener">Directions</a><button class="btn ghost small" data-act="markDel" data-id="${m.id}">Delete</button></div>`, { kind: 'mark' });
 }
+// Drop a marker at the boat's GPS position (front-screen button)
+async function dropMark() {
+  let pos = state.me && Date.now() - state.me.t < 60000 ? { p: [state.me.lng, state.me.lat], acc: state.me.acc } : null;
+  if (!pos && navigator.geolocation) {
+    toast('Getting your GPS position…', 15000);
+    pos = await new Promise(res => navigator.geolocation.getCurrentPosition(g => res({ p: [g.coords.longitude, g.coords.latitude], acc: g.coords.accuracy }), () => res(null), { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }));
+    $('#toast').hidden = true;
+  }
+  if (!pos) {
+    if (!(await confirmDlg('No GPS fix. Drop the marker at the centre of the map instead?', 'Use map centre'))) return;
+    pos = { p: map.getCenter().toArray(), acc: null };
+  }
+  const m = { id: uid(), p: pos.p, acc: pos.acc, name: 'Mark ' + (state.marks.length + 1), note: '', t: Date.now() };
+  state.marks.push(m); saveMarks();
+  map.easeTo({ center: m.p, zoom: Math.max(map.getZoom(), 13) });
+  try { navigator.vibrate && navigator.vibrate(60); } catch {}
+  toast(`${m.name} saved${pos.acc ? ` (±${Math.round(pos.acc)} m)` : ''}`);
+  markSheet(m.id);
+}
+$('#btnMark').onclick = dropMark;
 function marksList() {
-  showSheet(`<h2>Marks</h2><ul class="list">${state.marks.slice().sort((a, b) => b.t - a.t).map(m => `<li><button class="linkish" data-act="markGo" data-id="${m.id}"><span class="t">${esc(m.name)}</span></button><br><span class="sub">${fmtDay(new Date(m.t))}${m.note ? ' · ' + esc(m.note) : ''}</span></li>`).join('') || '<li class="sub">No marks yet. Tap the map, then “Save mark”.</li>'}</ul>
+  showSheet(`<h2>Marks</h2><ul class="list">${state.marks.slice().sort((a, b) => b.t - a.t).map(m => { const n = catchesAt(m).reduce((a, c) => a + (c.kept ? c.n : 0), 0); return `<li><button class="linkish" data-act="markGo" data-id="${m.id}"><span class="t">${esc(m.name)}</span></button>${n ? ` <span class="badge">${n} caught</span>` : ''}<br><span class="sub">${fmtDay(new Date(m.t))}${m.note ? ' · ' + esc(m.note) : ''}</span></li>`; }).join('') || '<li class="sub">No marks yet. Tap the 📍 button to mark where you are, or tap the map and choose “Save mark”.</li>'}</ul>
     ${state.marks.length ? '<div class="btnrow"><button class="btn ghost" data-act="marksGpx">Export GPX (for chartplotters)</button></div>' : ''}`, { tall: true, kind: 'marks' });
 }
 const gpx = list => `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Fish Access NZ" xmlns="http://www.topografix.com/GPX/1/1">\n${list.map(m => `<wpt lat="${m.p[1]}" lon="${m.p[0]}"><name>${esc(m.name)}</name>${m.note ? `<desc>${esc(m.note)}</desc>` : ''}<time>${new Date(m.t).toISOString()}</time></wpt>`).join('\n')}\n</gpx>`;
@@ -432,17 +458,18 @@ function bagToday() {
   for (const c of state.catches) if (c.kept && nzDayKey(new Date(c.t)) === key) { by[c.sp] = (by[c.sp] || 0) + c.n; if (isFinfish(c.sp)) fin += c.n; }
   return { by, fin };
 }
-function catchForm(p) {
+function catchForm(p, markId) {
+  const mk = markId && state.marks.find(x => x.id === markId); if (mk) p = mk.p;
   p = p || state.target || (state.me && [state.me.lng, state.me.lat]);
   const last = LS.get('lastSp', 'Snapper');
-  showSheet(`<h2>Log a catch</h2><p class="sub">${p ? llTxt(p) : 'No position: tap the map or turn on location first'}</p>
+  showSheet(`<h2>Log a catch</h2><p class="sub">${mk ? `At 📍 ${esc(mk.name)}` : p ? llTxt(p) : 'No position: tap the map or turn on location first'}</p>
     <label class="field-l">Species</label><select id="ctSp">${ALL_SPECIES.map(s => `<option ${s === last ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
     <div class="pair"><div><label class="field-l">How many</label><input type="number" id="ctN" value="1" min="1" inputmode="numeric"></div><div><label class="field-l" id="ctLL">Length (cm, optional)</label><input type="number" id="ctL" inputmode="decimal"></div></div>
     <div class="seg" id="ctSex" hidden><button class="on" data-v="m">Male</button><button data-v="f">Female</button></div>
     <div class="seg" id="ctKept"><button class="on" data-v="1">Kept</button><button data-v="0">Released</button></div>
     <label class="field-l">Notes</label><input type="text" id="ctNote" placeholder="Bait, depth, tide…">
     <p class="sub" id="ctMin"></p>
-    <div class="btnrow"><button class="btn" data-act="catchSave" data-lng="${p ? p[0] : ''}" data-lat="${p ? p[1] : ''}">Save</button><button class="btn ghost" data-act="catchList">Today’s bag</button></div>`, { kind: 'catch' });
+    <div class="btnrow"><button class="btn" data-act="catchSave" data-lng="${p ? p[0] : ''}" data-lat="${p ? p[1] : ''}" data-mark="${mk ? mk.id : ''}">Save</button><button class="btn ghost" data-act="catchList">Today’s bag</button></div>`, { kind: 'catch' });
   const upd = () => { const sp = $('#ctSp').value, f = F.finfish.find(x => x[0] === sp), s = F.shellfish.find(x => x[0] === sp); const min = f ? f[2] : s ? s[1] : '–'; const L = limitFor(sp, p || [174.8, -41]); $('#ctMin').textContent = `Minimum size: ${min} · daily limit: ${L != null ? L : sp === 'Blue cod' ? 'check' : f ? 'within the 20 finfish' : '–'}`;
     const cray = /crayfish/i.test(sp); $('#ctLL').textContent = cray ? 'Tail width (mm)' : /pāua/i.test(sp) ? 'Shell length (mm)' : 'Length (cm, optional)'; $('#ctSex').hidden = !cray;
     if (cray) $('#ctMin').textContent += '. Return berried or soft-shelled crays.'; };
@@ -705,7 +732,7 @@ $('#sheetClose').onclick = closeSheet;
 const P = b => [+b.dataset.lng, +b.dataset.lat];
 const actions = {
   closeSheet, plan: planSheet, planGo, planShow, tides: () => tideSheet(), cond: () => condSheet(), rules: rulesSheet, safety: safetySheet, about: aboutSheet, marks: marksList, catchList,
-  catchNew: () => catchForm(), spot: b => spotSheet(+b.dataset.i),
+  catchNew: () => catchForm(), catchAtMark: b => catchForm(null, b.dataset.id), spot: b => spotSheet(+b.dataset.i),
   idHere: b => { const p = P(b); map.easeTo({ center: p, zoom: Math.max(map.getZoom(), 12) }); identify(p); },
   tidesAt: b => tideSheet(P(b)), condAt: b => condSheet(P(b)),
   markNew: () => state.target && markForm(state.target),
@@ -718,7 +745,7 @@ const actions = {
   markGo: b => { const m = state.marks.find(x => x.id === b.dataset.id); if (m) { map.easeTo({ center: m.p, zoom: Math.max(map.getZoom(), 13) }); markSheet(m.id); } },
   markInfo: b => { const m = state.marks.find(x => x.id === b.dataset.id); if (m) identify(m.p); },
   markEdit: b => { const m = state.marks.find(x => x.id === b.dataset.id); if (m) markForm(m.p, m); },
-  markDel: async b => { if (!(await confirmDlg('Delete this mark?', 'Delete'))) return; state.marks = state.marks.filter(x => x.id !== b.dataset.id); saveMarks(); closeSheet(); },
+  markDel: async b => { if (!(await confirmDlg('Delete this mark? Catches logged here stay in your catch log.', 'Delete'))) return; state.marks = state.marks.filter(x => x.id !== b.dataset.id); state.catches.forEach(c => { if (c.markId === b.dataset.id) c.markId = null; }); LS.set('catches', state.catches); saveMarks(); closeSheet(); },
   marksGpx: () => shareFile('fish-marks.gpx', gpx(state.marks), 'application/gpx+xml'),
   catchSave: async b => {
     const sp = $('#ctSp').value, n = Math.max(1, Math.round(+$('#ctN').value || 1)), len = +$('#ctL').value || null, kept = $('#ctKept .on').dataset.v === '1';
@@ -729,14 +756,14 @@ const actions = {
     if (kept && len && /crayfish/i.test(sp)) { const female = $('#ctSex .on').dataset.v === 'f', need = female ? 60 : 54; if (len < need && !(await confirmDlg(`A ${female ? 'female' : 'male'} cray needs a tail width of at least ${need} mm. This one is ${len} mm. Keep it anyway?`, 'Log it'))) return; }
     if (kept && len && /pāua/i.test(sp) && len < 125 && !(await confirmDlg(`Pāua minimum is 125 mm. This one is ${len} mm. Keep it anyway?`, 'Log it'))) return;
     let tide = ''; if (p) { try { const ev = await stationEvents(nearestStation(p)); const t = tideAt(ev, new Date()); if (t) tide = (t.rising ? 'rising' : 'falling') + ' tide'; } catch {} }
-    state.catches.push({ id: uid(), sp, n, len, kept, note: $('#ctNote').value.trim(), p, t: Date.now(), tide });
+    state.catches.push({ id: uid(), sp, n, len, kept, note: $('#ctNote').value.trim(), p, t: Date.now(), tide, markId: b.dataset.mark || null });
     LS.set('catches', state.catches); LS.set('lastSp', sp);
     const L = limitFor(sp, p || [174.8, -41]), bag = bagToday(), got = bag.by[sp] || 0;
     if (kept && L && got > L) toast(`Over the ${sp} limit (${got} of ${L}). Release the extra fish.`, 6000);
     else if (kept && L && got === L) toast(`${sp}: daily limit reached (${L}).`, 5000);
     else if (kept && isFinfish(sp) && bag.fin >= 20) toast(`Combined finfish limit reached (${bag.fin} of 20).`, 5000);
     else toast('Catch logged');
-    catchList();
+    if (b.dataset.mark) { renderPins(); markSheet(b.dataset.mark); } else catchList();
   },
   catchDel: async b => { if (!(await confirmDlg('Delete this catch entry?', 'Delete'))) return; state.catches = state.catches.filter(x => x.id !== b.dataset.id); LS.set('catches', state.catches); catchList(); },
   catchCsv: () => shareFile('catch-log.csv', 'date,time,species,count,length_cm,kept,lat,lon,tide,notes\n' + state.catches.map(c => { const d = new Date(c.t); return [nzDayKey(d), fmtTime(d), c.sp, c.n, c.len || '', c.kept ? 'yes' : 'no', c.p ? c.p[1].toFixed(5) : '', c.p ? c.p[0].toFixed(5) : '', c.tide || '', '"' + (c.note || '').replace(/"/g, '""') + '"'].join(','); }).join('\n'), 'text/csv')
@@ -763,7 +790,7 @@ window.addEventListener('online', net); window.addEventListener('offline', net);
 /* ---------------- start-up ---------------- */
 function welcome() {
   showSheet(`<h2>Fish Access NZ</h2><p>Tap anywhere on the water to see what you can do there, the tide and nearby spots.</p>
-    <ul class="sub"><li><b>Red</b>: Kāpiti Marine Reserve, no fishing</li><li><b>Purple</b>: Cook Strait cable zone, no fishing or anchoring</li><li><b>Amber</b>: Pukerua Bay, hand-held line only</li><li><b>Blue lines</b>: depth contours · <b>grey dashes</b>: where the blue cod limit changes</li><li>🐟 boat spots · 🎣 shore spots · 🦞 crayfish dive spots · ⚓ ramps</li></ul>
+    <ul class="sub"><li><b>Red</b>: Kāpiti Marine Reserve, no fishing</li><li><b>Purple</b>: Cook Strait cable zone, no fishing or anchoring</li><li><b>Amber</b>: Pukerua Bay, hand-held line only</li><li><b>Blue lines</b>: depth contours · <b>grey dashes</b>: where the blue cod limit changes</li><li>🐟 boat spots · 🎣 shore spots · 🦞 crayfish dive spots · ⚓ ramps</li><li><b>📍 button</b>: mark where you are and log what you catch there</li></ul>
     <p class="sub">Tap the compass button for <b>Where should I fish?</b>: the best spots for the time you want to go. Turn on the location button for live boundary alerts on the water. Currently covers Mana to Kāpiti.</p>
     <p class="sub">A planning aid, not a chart. Check the NZ Fishing Rules app for the legal rules.</p>
     <div class="btnrow"><button class="btn" data-act="welcomeOk">Got it</button></div>`, { tall: true, kind: 'welcome' });
