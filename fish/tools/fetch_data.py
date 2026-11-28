@@ -1,0 +1,160 @@
+"""Fetches open data for the fishing map. Run by GitHub Actions (needs internet).
+Writes GeoJSON/CSV into fish/data/ plus a manifest. Python standard library only."""
+import json, os, time, urllib.request, urllib.parse, datetime
+
+OUT = os.path.join(os.path.dirname(__file__), '..', 'data')
+BBOX = (174.50, -41.40, 175.30, -40.65)   # Mākara to Ōtaki, including Kapiti and Mana islands
+UA = {'User-Agent': 'HuntAccessNZ-fishmap-data/1.0 (github.com/engchecker/huntmap)'}
+log = {}
+
+
+def get(url, data=None, tries=3):
+    err = None
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(url, data=data, headers=UA)
+            with urllib.request.urlopen(req, timeout=120) as r:
+                return r.read()
+        except Exception as e:
+            err = e
+            time.sleep(3 * (i + 1))
+    raise err
+
+
+def esri_to_geojson(j):
+    feats = []
+    for f in j.get('features', []):
+        g = f.get('geometry') or {}
+        if 'rings' in g:
+            r = g['rings']
+            geom = {'type': 'Polygon', 'coordinates': r} if len(r) == 1 else {'type': 'MultiPolygon', 'coordinates': [[x] for x in r]}
+        elif 'paths' in g:
+            geom = {'type': 'MultiLineString', 'coordinates': g['paths']}
+        elif 'x' in g:
+            geom = {'type': 'Point', 'coordinates': [g['x'], g['y']]}
+        else:
+            continue
+        feats.append({'type': 'Feature', 'properties': f.get('attributes', {}), 'geometry': geom})
+    return feats
+
+
+def rnd(o, nd=5):
+    if isinstance(o, float):
+        return round(o, nd)
+    if isinstance(o, list):
+        return [rnd(x, nd) for x in o]
+    if isinstance(o, dict):
+        return {k: rnd(v, nd) for k, v in o.items()}
+    return o
+
+
+def query(layer_url, simplify=None, fields='*'):
+    feats, off = [], 0
+    while True:
+        p = {'where': '1=1', 'geometry': ','.join(map(str, BBOX)), 'geometryType': 'esriGeometryEnvelope', 'inSR': 4326,
+             'spatialRel': 'esriSpatialRelIntersects', 'outFields': fields, 'outSR': 4326, 'returnGeometry': 'true',
+             'resultOffset': off, 'resultRecordCount': 1000, 'f': 'json'}
+        if simplify:
+            p['maxAllowableOffset'] = simplify
+        j = json.loads(get(layer_url + '/query?' + urllib.parse.urlencode(p)))
+        if 'error' in j:   # older servers: no paging
+            p.pop('resultOffset'); p.pop('resultRecordCount')
+            j = json.loads(get(layer_url + '/query?' + urllib.parse.urlencode(p)))
+            if 'error' in j:
+                raise RuntimeError(j['error'])
+            return feats + esri_to_geojson(j)
+        got = esri_to_geojson(j)
+        feats += got
+        if not j.get('exceededTransferLimit') or not got:
+            return feats
+        off += len(got)
+
+
+def save(name, feats, note):
+    with open(os.path.join(OUT, name + '.geojson'), 'w') as f:
+        json.dump({'type': 'FeatureCollection', 'features': rnd(feats)}, f, separators=(',', ':'))
+    log[name] = {'features': len(feats), 'source': note}
+    print(name, len(feats))
+
+
+def tryit(name, fn):
+    try:
+        fn()
+    except Exception as e:
+        log[name] = {'error': str(e)[:300]}
+        print('FAIL', name, e)
+
+
+os.makedirs(OUT, exist_ok=True)
+DOC = 'https://services1.arcgis.com/3JjYDyG3oajxU6HO/arcgis/rest/services/'
+MPI = 'https://maps.mpi.govt.nz/wss/service/arcgis1/guest/'
+
+tryit('reserves', lambda: save('reserves', query(DOC + 'DOC_Marine_Reserves/FeatureServer/0'), 'DOC Marine Reserves (CC BY 4.0)'))
+tryit('cpz', lambda: save('cpz', query('https://mapping.gw.govt.nz/arcgis/rest/services/GW/NRPMap_P_operative/MapServer/63'), 'Greater Wellington Regional Council: Cook Strait Cable Protection Zone'))
+tryit('depth', lambda: save('depth', query(MPI + 'MARINE/MARINE_Bathymetry/MapServer/0', simplify=0.00015, fields='Depth'), 'MPI MARINE_Bathymetry depth contours'))
+
+
+def mpi_service(svc, prefix):
+    meta = json.loads(get(MPI + svc + '/MapServer?f=json'))
+    for L in meta.get('layers', []):
+        if L.get('subLayerIds'):
+            continue
+        nm = prefix + '_' + str(L['id'])
+
+        def go(L=L, nm=nm):
+            fs = query(MPI + svc + '/MapServer/' + str(L['id']), simplify=0.0001)
+            if fs:
+                save(nm, fs, 'MPI ' + svc + ' / ' + L['name'])
+        tryit(nm, go)
+
+
+tryit('fma', lambda: mpi_service('MARINE/MARINE_FMAs', 'fma'))
+
+
+def restrictions():
+    folder = json.loads(get(MPI + 'MARINE?f=json'))
+    names = [s['name'] for s in folder.get('services', [])]
+    log['mpi_services'] = names
+    for n in names:
+        if any(k in n for k in ('Restriction', 'Recreational', 'Closure', 'Mataitai', 'Taiapure')):
+            mpi_service(n, 'mpi_' + n.split('/')[-1].replace('MARINE_', ''))
+
+
+tryit('restrictions', restrictions)
+
+
+def slips():
+    b = f'{BBOX[1]},{BBOX[0]},{BBOX[3]},{BBOX[2]}'
+    q = f'[out:json][timeout:60];(node["leisure"="slipway"]({b});way["leisure"="slipway"]({b}););out center tags;'
+    j = json.loads(get('https://overpass-api.de/api/interpreter', data=urllib.parse.urlencode({'data': q}).encode()))
+    fs = []
+    for e in j['elements']:
+        lat, lon = (e['lat'], e['lon']) if 'lat' in e else (e['center']['lat'], e['center']['lon'])
+        tags = {k: v for k, v in e.get('tags', {}).items() if k in ('name', 'access', 'fee', 'operator', 'description')}
+        fs.append({'type': 'Feature', 'properties': tags, 'geometry': {'type': 'Point', 'coordinates': [lon, lat]}})
+    save('slipways', fs, '© OpenStreetMap contributors (ODbL)')
+
+
+tryit('slipways', slips)
+
+
+def tides():
+    base = 'https://static.charts.linz.govt.nz/tide-tables/maj-ports/csv/'
+    for port in ('Mana Marina', 'Port Taranaki'):
+        for y in (2026, 2027, 2028):
+            fn = f'{port} {y}.csv'
+            try:
+                b = get(base + urllib.parse.quote(fn))
+                with open(os.path.join(OUT, 'tide-' + port.replace(' ', '') + f'-{y}.csv'), 'wb') as f:
+                    f.write(b)
+                log['tide ' + fn] = len(b)
+            except Exception as e:
+                log['tide ' + fn] = 'FAIL ' + str(e)[:100]
+
+
+tryit('tides', tides)
+
+log['_fetched'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+log['_bbox'] = BBOX
+with open(os.path.join(OUT, 'manifest.json'), 'w') as f:
+    json.dump(log, f, indent=1)
