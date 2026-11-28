@@ -193,6 +193,26 @@ def tides():
 
 tryit('tides', tides)
 
+# Does LINZ publish hydrographic (chart) layers on its keyless ArcGIS Online services?
+def linz_hydro():
+    root = 'https://services.arcgis.com/xdsHIIxuCWByZiCB/arcgis/rest/services'
+    j = json.loads(get(root + '?f=json'))
+    names = [s['name'] for s in j.get('services', [])]
+    log['linz_agol_service_count'] = len(names)
+    hyd = [n for n in names if any(k in n.lower() for k in ('sound', 'depth', 'hydro', 'bathy', 'chart', 'contour', 'rock', 'wreck', 'obstruct'))]
+    log['linz_agol_hydro'] = hyd
+    for n in hyd:
+        meta = json.loads(get(f'{root}/{n}/FeatureServer?f=json'))
+        for L in meta.get('layers', []):
+            nm = 'linz_' + n.lower()[:40] + '_' + str(L['id'])
+            def go(n=n, L=L, nm=nm):
+                fs = query(f'{root}/{n}/FeatureServer/{L["id"]}', simplify=0.00005)
+                if fs: save(nm, fs, f'LINZ ArcGIS Online / {n} / {L["name"]}')
+            tryit(nm, go)
+
+
+tryit('linz_hydro', linz_hydro)
+
 log['_fetched'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 log['_bbox'] = BBOX
 with open(os.path.join(OUT, 'manifest.json'), 'w') as f:
