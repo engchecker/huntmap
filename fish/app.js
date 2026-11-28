@@ -224,7 +224,7 @@ function depthAt(p) {
 }
 const nearest = (p, list) => list.map((x, i) => ({ ...x, i, dist: distM(p, x.p) })).sort((a, b) => a.dist - b.dist);
 
-function verdictHtml(z) {
+function verdictHtml(z, p) {
   const h = z.hit;
   if (h.some(x => x.kind === 'reserve')) return `<div class="verdict v-no"><div><b>Marine reserve: no fishing</b><span>${esc(h.find(x => x.kind === 'reserve').name)}. No fishing of any kind and no taking of any marine life. Transit only, with gear stowed.</span></div></div>`;
   if (h.some(x => x.kind === 'cpz')) return `<div class="verdict v-no"><div><b>Cable zone: no fishing or anchoring</b><span>Cook Strait Cable Protection Zone. Applies to every vessel. Fines up to $100,000.</span></div></div>`;
@@ -246,7 +246,7 @@ function identify(p) {
   const near = z.near.filter(n => !z.hit.some(h => h.name === n.name)).slice(0, 2);
   const st = nearestStation(p);
   showSheet(`<h2>${llTxt(p)}</h2>
-    ${verdictHtml(z)}
+    ${verdictHtml(z, p)}
     ${near.map(n => `<p class="warnbox">${n.kind === 'reserve' ? 'Marine reserve' : n.kind === 'cpz' ? 'Cable protection zone' : esc(n.name)} boundary ${fmtDist(n.d)} away. Watch your drift.</p>`).join('')}
     <dl class="kv">
       <dt>Blue cod</dt><dd>${esc(bc.label)}${bc.approx ? ' (boundary approximate)' : ''}</dd>
