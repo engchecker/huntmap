@@ -28,5 +28,5 @@ body.fish .seg button{min-height:44px}
 .plan .bar{height:6px;border-radius:3px;background:var(--field);margin:6px 0}.plan .bar i{display:block;height:100%;border-radius:3px;background:#1f9d55}
 .warnTxt{color:#b45309}
 .fpin.dive span{background:#b91c1c}
-.fpin{position:relative}.fpin .cnt{position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#1f9d55;color:#fff;font:700 11px/18px system-ui;text-align:center;font-style:normal;border:1.5px solid #fff}
+.fpin span{position:relative}.fpin .cnt{position:absolute;top:-6px;right:-8px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#1f9d55;color:#fff;font:700 11px/18px system-ui;text-align:center;font-style:normal;border:1.5px solid #fff}
 .fab.mk{background:#ff6a13;color:#fff}.fab.mk svg path{fill:#fff}.fab.mk svg circle{stroke:#ff6a13;stroke-width:2}

@@ -136,7 +136,7 @@ function renderPins() {
   for (const k of Object.keys(markers)) { markers[k].forEach(m => m.remove()); markers[k] = []; }
   if (state.vis.spots) F.spots.forEach((s, i) => markers.spots.push(pin('spot' + (s.dive ? ' dive' : s.shore ? ' shore' : ''), s.dive ? '🦞' : s.shore ? '🎣' : '🐟', s.p, () => spotSheet(i)).addTo(map)));
   if (state.vis.ramps) rampList().forEach((r, i) => markers.ramps.push(pin('ramp', '⚓', r.p, () => rampSheet(i)).addTo(map)));
-  if (state.vis.marks) state.marks.forEach(m => { const n = catchesAt(m).reduce((a, c) => a + (c.kept ? c.n : 0), 0); const mk = pin('mark', '📍', m.p, () => markSheet(m.id)); if (n) { const t = document.createElement('i'); t.className = 'cnt'; t.textContent = n; mk.getElement().appendChild(t); } markers.marks.push(mk.addTo(map)); });
+  if (state.vis.marks) state.marks.forEach(m => { const n = catchesAt(m).reduce((a, c) => a + (c.kept ? c.n : 0), 0); const mk = pin('mark', '📍', m.p, () => markSheet(m.id)); if (n) { const t = document.createElement('i'); t.className = 'cnt'; t.textContent = n; mk.getElement().querySelector('span').appendChild(t); } markers.marks.push(mk.addTo(map)); });
 }
 function rampList() {
   // named ramps from rules.js, plus other OpenStreetMap slipways in the region not already listed
