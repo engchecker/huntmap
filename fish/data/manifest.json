@@ -32,12 +32,34 @@
   "source": "MPI FMA general regions via NIWA"
  },
  "slipways": {
-  "features": 46,
-  "source": "\u00a9 OpenStreetMap contributors (ODbL)"
+  "error": "<urlopen error [Errno 101] Network is unreachable>"
  },
  "linz_agol_service_count": 77,
  "linz_agol_hydro": [],
- "_fetched": "2026-11-28T04:18:47.160019+00:00",
+ "seasketch_candidates": [
+  "Hauraki/bathymetry_contours_labels/0 BATHYMETRY CONTOURS [esriGeometryPolyline]",
+  "Hauraki/bathymetry_contours/0 BATHYMETRY CONTOURS [esriGeometryPolyline]",
+  "Hauraki/RockyReef/0 Rocky Reef - Intertidal and Subtidal [esriGeometryPolygon]",
+  "Hauraki/shellfish_restoration_exclusion_zones/3 Depths >20m [esriGeometryPolygon]",
+  "Hauraki/Shipping_Boating_Routes_Zones1/1 Shipwrecks [esriGeometryPoint]",
+  "Hauraki/Shipwrecks/0 Shipwrecks [esriGeometryPoint]",
+  "National/EasternRockhopperPenguin/0 S_OBIS_EasternRockhopperPenguin_nbr [esriGeometryPoint]",
+  "National/EasternRockhopperPenguin/1 S_eBird_EasternRockhopperPenguin_nbr [esriGeometryPoint]",
+  "National/EasternRockhopperPenguin/2 S_OBIS_EasternRockhopperPenguin_br [esriGeometryPoint]",
+  "National/EasternRockhopperPenguin/3 S_eBird_EasternRockhopperPenguin_br [esriGeometryPoint]",
+  "National/LINZ_Datasets/1 Wreck points (Hydro, 1:4k - 1:22k) [esriGeometryMultipoint]",
+  "National/LINZ_Datasets/3 Obstruction polygons (Hydro, 1:4k - 1:22k) [esriGeometryPolygon]",
+  "National/NZMPASAG_Habitats_RockyReefNZ_201810/0 Rocky Reef New Zealand [esriGeometryPolygon]",
+  "National/NZMPASAG_Habitats_WellingtonSitesOfSignificance_2012_201810/3 Bathymetry [esriGeometryPolyline]",
+  "National/NZMPASAG_Habitats_WellingtonSitesOfSignificance_2012_201810/8 Rock reef [esriGeometryPolygon]",
+  "National/Our_Estuaries/82 Bathymetry (depth) [esriGeometryPolygon]",
+  "National/Rocket_Lab_permitted_launch_deposit_2018/0 RocketLabpermittedlaunchdeposit2018 [esriGeometryPolygon]",
+  "National/Waimea_Inlet_Bathymetry/0 Bathymetry [esriGeometryPolygon]",
+  "National/Yellow_eyed_penguins_foraging/0 Bathymetry [esriGeometryPolyline]",
+  "Otago/MPA_Policy_Depth2015/0 South-East Marine Depth 2015 [esriGeometryPolygon]",
+  "Otago/QMA_SEMPF/8 Qma_Spiny_rock_lobster_SEMPF [esriGeometryPolygon]"
+ ],
+ "_fetched": "2026-11-28T04:35:47.447743+00:00",
  "_bbox": [
   174.5,
   -41.4,
