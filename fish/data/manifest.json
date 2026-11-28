@@ -17,11 +17,11 @@
  },
  "niwa_bathy_layers": [],
  "deptharea": {
-  "features": 677,
+  "features": 723,
   "source": "DOC SeaSketch: Bathymetry (depth) areas from LINZ nautical charts"
  },
  "depth_niwa250": {
-  "features": 88,
+  "features": 112,
   "source": "NIWA bathymetry model contours (250 m grid)"
  },
  "depth_layers": [
@@ -35,25 +35,28 @@
   "features": 46,
   "source": "\u00a9 OpenStreetMap contributors (ODbL)"
  },
+ "tide Wellington 2026.csv": 19486,
+ "tide Wellington 2027.csv": 19494,
+ "tide Wellington 2028.csv": 19548,
  "linz_agol_service_count": 77,
  "linz_agol_hydro": [],
  "soundings": {
-  "features": 1851,
+  "features": 2015,
   "source": "LINZ Data Service layer 50866 (CC BY 4.0)"
  },
  "contours": {
-  "features": 511,
+  "features": 533,
   "source": "LINZ Data Service layer 50554 (CC BY 4.0)"
  },
  "deptharea_fine": {
   "features": 521,
   "source": "LINZ Data Service layer 50671 (CC BY 4.0)"
  },
- "_fetched": "2026-11-28T05:04:10.999749+00:00",
+ "_fetched": "2026-11-28T06:01:06.077855+00:00",
  "_bbox": [
   174.5,
-  -41.4,
-  175.3,
+  -41.5,
+  175.35,
   -40.65
  ]
 }
