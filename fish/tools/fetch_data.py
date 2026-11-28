@@ -3,7 +3,7 @@ Writes GeoJSON/CSV into fish/data/ plus a manifest. Python standard library only
 import json, os, time, urllib.request, urllib.parse, datetime
 
 OUT = os.path.join(os.path.dirname(__file__), '..', 'data')
-BBOX = (174.50, -41.40, 175.30, -40.65)   # Mākara to Ōtaki, including Kapiti and Mana islands
+BBOX = (174.50, -41.50, 175.35, -40.65)   # Ōtaki to the Wellington south coast and Turakirae, including Kāpiti, Mana and Wellington Harbour
 UA = {'User-Agent': 'HuntAccessNZ-fishmap-data/1.0 (github.com/engchecker/huntmap)'}
 log = {}
 
@@ -180,12 +180,12 @@ tryit('slipways', slips)
 
 
 def tides():
-    if os.path.exists(os.path.join(OUT, 'tide-ManaMarina-2028.csv')):
-        return
     base = 'https://static.charts.linz.govt.nz/tide-tables/maj-ports/csv/'
-    for port in ('Mana Marina', 'Port Taranaki'):
+    for port in ('Mana Marina', 'Port Taranaki', 'Wellington'):
         for y in (2026, 2027, 2028):
             fn = f'{port} {y}.csv'
+            if os.path.exists(os.path.join(OUT, 'tide-' + port.replace(' ', '') + f'-{y}.csv')):
+                continue
             try:
                 b = get(base + urllib.parse.quote(fn))
                 with open(os.path.join(OUT, 'tide-' + port.replace(' ', '') + f'-{y}.csv'), 'wb') as f:
