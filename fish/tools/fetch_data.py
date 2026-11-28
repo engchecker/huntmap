@@ -91,7 +91,29 @@ MPI = 'https://maps.mpi.govt.nz/wss/service/arcgis1/guest/'
 
 tryit('reserves', lambda: save('reserves', query(DOC + 'DOC_Marine_Reserves/FeatureServer/0'), 'DOC Marine Reserves (CC BY 4.0)'))
 tryit('cpz', lambda: save('cpz', query('https://mapping.gw.govt.nz/arcgis/rest/services/GW/NRPMap_P_operative/MapServer/63'), 'Greater Wellington Regional Council: Cook Strait Cable Protection Zone'))
-tryit('depth', lambda: save('depth', query(MPI + 'MARINE/MARINE_Bathymetry/MapServer/0', simplify=0.00015, fields='Depth'), 'MPI MARINE_Bathymetry depth contours'))
+NIWA = 'https://gis.niwa.co.nz/server/rest/services/'
+
+
+def niwa_depth():
+    # NIWA's Bathymetry service holds LINZ chart depth contours at several scales; keep every
+    # polyline contour layer that has features here, and record which layers were used.
+    meta = json.loads(get(NIWA + 'Bathymetry/MapServer/layers?f=json'))
+    used = []
+    for L in meta.get('layers', []):
+        if L.get('geometryType') != 'esriGeometryPolyline' or 'ontour' not in (L.get('name', '') + L.get('description', '')):
+            continue
+        nm = 'depth_' + str(L['id'])
+        def go(L=L, nm=nm):
+            fs = query(NIWA + 'Bathymetry/MapServer/' + str(L['id']), simplify=0.0001)
+            if fs:
+                save(nm, fs, 'NIWA Bathymetry / ' + L['name'] + ' :: ' + L.get('description', '')[:300])
+                used.append(nm)
+        tryit(nm, go)
+    log['depth_layers'] = used
+
+
+tryit('depth', niwa_depth)
+tryit('fma_niwa', lambda: save('fma', query(NIWA + 'Fisheries_Management_Areas___FMAs/MapServer/303', simplify=0.0005), 'MPI FMA general regions via NIWA'))
 
 
 def mpi_service(svc, prefix):
@@ -108,7 +130,6 @@ def mpi_service(svc, prefix):
         tryit(nm, go)
 
 
-tryit('fma', lambda: mpi_service('MARINE/MARINE_FMAs', 'fma'))
 
 
 def restrictions():
@@ -120,7 +141,6 @@ def restrictions():
             mpi_service(n, 'mpi_' + n.split('/')[-1].replace('MARINE_', ''))
 
 
-tryit('restrictions', restrictions)
 
 
 def slips():
@@ -139,6 +159,8 @@ tryit('slipways', slips)
 
 
 def tides():
+    if os.path.exists(os.path.join(OUT, 'tide-ManaMarina-2028.csv')):
+        return
     base = 'https://static.charts.linz.govt.nz/tide-tables/maj-ports/csv/'
     for port in ('Mana Marina', 'Port Taranaki'):
         for y in (2026, 2027, 2028):
