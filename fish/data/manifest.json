@@ -35,7 +35,9 @@
   "features": 46,
   "source": "\u00a9 OpenStreetMap contributors (ODbL)"
  },
- "_fetched": "2026-11-28T04:09:25.822661+00:00",
+ "linz_agol_service_count": 77,
+ "linz_agol_hydro": [],
+ "_fetched": "2026-11-28T04:18:47.160019+00:00",
  "_bbox": [
   174.5,
   -41.4,
