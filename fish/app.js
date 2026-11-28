@@ -461,6 +461,162 @@ function catchList() {
   void today;
 }
 
+/* ---------------- planner: where should I fish? ---------------- */
+// Scores each spot (and each species there) for a chosen time on: season, depth, tide state, light,
+// forecast wind and swell (allowing for shelter), and distance from a launch. A guide built from rules of thumb.
+const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+let wxCache = null;
+async function regionForecast() {
+  if (wxCache && Date.now() - wxCache.at < 30 * 60000) return wxCache;
+  if (!online()) return null;
+  const q = 'timezone=UTC&forecast_days=7';
+  try {
+    const [w, m] = await Promise.all([
+      fetchT(meteoURL(`latitude=-41.00&longitude=174.85&${q}&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn`), 15000).then(r => r.json()),
+      fetchT(marineURL(`latitude=-41.00&longitude=174.72&${q}&hourly=wave_height,swell_wave_height,swell_wave_direction`), 15000).then(r => r.json()).catch(() => null)
+    ]);
+    const t = w.hourly.time.map(x => Date.parse(x + 'Z'));
+    wxCache = { at: Date.now(), t, ws: w.hourly.wind_speed_10m, wd: w.hourly.wind_direction_10m, wg: w.hourly.wind_gusts_10m, wv: m && m.hourly ? m.hourly.wave_height : null, sw: m && m.hourly ? m.hourly.swell_wave_height : null, sd: m && m.hourly ? m.hourly.swell_wave_direction : null };
+    return wxCache;
+  } catch { return null; }
+}
+function wxAt(wx, when) {
+  if (!wx) return null;
+  const i = wx.t.findIndex(t => t >= +when - 30 * 60000); if (i < 0 || Math.abs(wx.t[i] - when) > 2 * 3600e3) return null;
+  return { ws: wx.ws[i], wd: wx.wd[i], wg: wx.wg[i], wv: wx.wv ? wx.wv[i] : null, sw: wx.sw ? wx.sw[i] : null, sd: wx.sd ? wx.sd[i] : null };
+}
+function tideState(ev, when) {
+  const i = ev.findIndex(e => e.t > when); if (i < 1) return null;
+  const prev = ev[i - 1], next = ev[i], toChange = Math.min(when - prev.t, next.t - when);
+  return { prev, next, toChange, rising: next.h > prev.h };
+}
+function scoreSpot(s, sp, when, mode, wx, tideEv) {
+  const why = [], warn = [];
+  const M = F.model[sp]; if (!M) return null;
+  const mon = +new Intl.DateTimeFormat('en-NZ', { timeZone: TZ, month: 'numeric' }).format(when) - 1;
+  // season
+  const season = M.m[mon]; if (season <= 0.05) return null;
+  why.push(season >= 0.9 ? `${sp} in peak season` : season >= 0.6 ? `${sp} in season` : `${sp} off-peak`);
+  // depth
+  const dep = depthAt(s.p), dv = dep ? (dep.spot != null && dep.spotOff < 200 ? dep.spot : dep.d + (dep.band ? 1 : 0)) : null;
+  const depthS = dv == null ? 0.8 : dv >= M.d[0] - 2 && dv <= M.d[1] + 10 ? 1 : 0.45;
+  // light
+  const sun = sunTimes(when, s.p[1], s.p[0]); let light = 0.75, lightTxt = '';
+  if (sun) {
+    const dd = Math.min(Math.abs(when - sun.rise), Math.abs(when - sun.set));
+    if (dd < 90 * 60000) { light = 1; lightTxt = Math.abs(when - sun.rise) < Math.abs(when - sun.set) ? 'dawn' : 'dusk'; }
+    else if (when < sun.rise || when > sun.set) { light = M.night ? 0.8 : 0.35; lightTxt = 'dark'; }
+  }
+  if (lightTxt === 'dawn' || lightTxt === 'dusk') why.push(`${lightTxt} feeding time`);
+  if (lightTxt === 'dark') (M.night ? why : warn).push(M.night ? `${sp} bite after dark` : 'dark: poor for this species');
+  // tide
+  let tide = 0.75; const ts = tideEv && tideState(tideEv, when);
+  if (ts) {
+    const hrs = ts.toChange / 3600e3;
+    if (s.current) { tide = hrs < 1 ? 1 : hrs < 2 ? 0.8 : 0.55; if (hrs < 1) why.push('near slack water: easier in the current'); else warn.push('strong tidal flow'); }
+    else { tide = hrs < 1.5 ? 1 : hrs < 2.5 ? 0.85 : 0.7; if (hrs < 1.5) why.push(`tide turns ${fmtTime(Math.abs(ts.next.t - when) < Math.abs(ts.prev.t - when) ? ts.next.t : ts.prev.t)}`); else why.push(`${ts.rising ? 'incoming' : 'outgoing'} tide`); }
+  }
+  // weather (boats and kayaks care most; rock and beach spots care about swell)
+  let weather = 1; const w = wxAt(wx, when);
+  if (w) {
+    const dir = compass(w.wd), sheltered = (s.shelter || []).includes(dir), eff = w.ws * (sheltered ? 0.45 : 1), gust = w.wg * (sheltered ? 0.5 : 1);
+    const swellExposed = w.sd == null ? true : !(s.shelter || []).includes(compass(w.sd));
+    const swell = w.sw != null ? w.sw * (swellExposed ? 1 : 0.4) : null;
+    if (mode === 'kayak') weather = eff < 8 && gust < 14 && (swell == null || swell < 0.8) ? 1 : eff < 11 ? 0.35 : 0;
+    else if (mode === 'boat') weather = eff < 12 && gust < 20 && (swell == null || swell < 1.5) ? 1 : eff < 18 && gust < 25 ? 0.45 : 0.05;
+    else weather = (swell == null || swell < 1.8) && eff < 22 ? 1 : 0.5;
+    const wtxt = `${dir} ${Math.round(w.ws)} kn${sheltered ? ', sheltered here' : ''}`;
+    (weather >= 0.9 ? why : warn).push(weather >= 0.9 ? `wind ${wtxt}` : `wind ${wtxt}${swell != null ? `, swell ${swell.toFixed(1)} m` : ''}`);
+    if (mode !== 'shore' && sheltered && w.ws >= 15) { warn.push('the run out there is exposed'); weather *= 0.8; }
+  }
+  // travel from the nearest launch (boats and kayaks)
+  let travel = 1;
+  if (mode !== 'shore') {
+    const r = nearest(s.p, rampList())[0], km = r ? r.dist / 1000 : 99;
+    if (mode === 'kayak' && km > 2.5) return null;
+    travel = km < 5 ? 1 : km < 12 ? 0.9 : 0.8;
+    why.push(`${km.toFixed(km < 10 ? 1 : 0)} km from ${r.n.replace(/ \(.*\)/, '')}`);
+  }
+  // legality: never recommend somewhere closed
+  const z = zoneAt(s.p); if (z.hit.some(h => h.kind === 'reserve' || h.kind === 'cpz')) return null;
+  if (z.near.length && z.near[0].d < 600) warn.push(`${z.near[0].kind === 'reserve' ? 'marine reserve' : 'restricted area'} ${fmtDist(z.near[0].d)} away`);
+  if (sp === 'Blue cod') warn.push(`blue cod limit: ${bluecodTxt(s.p).limit === '2' ? '2 a day' : 'check'}`);
+  const score = season * depthS * light * tide * weather * travel;
+  return { s, sp, score, why, warn, w };
+}
+async function recommend(when, mode, target) {
+  const wx = await regionForecast();
+  const tides = {};
+  const results = [];
+  for (const s of F.spots) {
+    if (mode === 'shore' ? !s.shore : s.shore && mode === 'boat') continue;
+    const st = nearestStation(s.p); if (!tides[st.n]) tides[st.n] = await stationEvents(st);
+    const sps = target === 'Any' ? s.sp : s.sp.filter(x => x === target);
+    const rs = sps.map(sp => scoreSpot(s, sp, when, mode, wx, tides[st.n])).filter(Boolean).sort((a, b) => b.score - a.score);
+    if (rs.length) { const best = rs[0]; best.also = rs.slice(1).filter(x => x.score >= best.score * 0.85).map(x => x.sp).slice(0, 2); results.push(best); }
+  }
+  return { results: results.sort((a, b) => b.score - a.score), wx: !!wxAt(wx, when) };
+}
+const PLAN_TIMES = [['best', 'Best time that day'], ['dawn', 'Dawn'], ['morning', 'Morning (9 am)'], ['midday', 'Midday'], ['afternoon', 'Afternoon (3 pm)'], ['dusk', 'Dusk'], ['night', 'Night (10 pm)'], ['custom', 'A set time']];
+function planSheet() {
+  const pr = LS.get('plan', { mode: 'boat', time: 'dawn', sp: 'Any' });
+  const today = nzDayKey(new Date());
+  const spp = Object.keys(F.model).filter(k => F.spots.some(s => s.sp.includes(k)));
+  showSheet(`<h2>Where should I fish?</h2>
+    <p class="sub">Picks spots for your time from the season, depth, tide, light, forecast wind and swell (allowing for shelter) and distance from a ramp.</p>
+    <div class="seg" id="plMode">${[['boat', '🚤 Boat'], ['kayak', '🛶 Kayak'], ['shore', '🎣 Shore']].map(([k, l]) => `<button data-v="${k}" class="${pr.mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="pair"><div><label class="field-l">Day</label><input type="date" id="plDay" value="${today}" min="${today}"></div>
+    <div><label class="field-l">When</label><select id="plTime">${PLAN_TIMES.map(([k, l]) => `<option value="${k}" ${pr.time === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+    <div id="plCustomBox" ${pr.time === 'custom' ? '' : 'hidden'}><label class="field-l">Time</label><input type="time" id="plCustom" value="${pr.custom || '06:00'}"></div>
+    <label class="field-l">Target species</label><select id="plSp"><option>Any</option>${spp.map(k => `<option ${pr.sp === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}</select>
+    <div class="btnrow"><button class="btn" data-act="planGo">Recommend spots</button></div>
+    <div id="plOut"></div>`, { tall: true, kind: 'plan' });
+  $('#plMode').onclick = e => { const b = e.target.closest('button'); if (!b) return; $('#plMode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
+  $('#plTime').onchange = () => { $('#plCustomBox').hidden = $('#plTime').value !== 'custom'; };
+}
+function whenFor(day, key, custom, p) {
+  const [y, mo, d] = day.split('-').map(Number), noon = nzDate(y, mo, d, 12, 0), sun = sunTimes(noon, p[1], p[0]);
+  const at = (h, m = 0) => nzDate(y, mo, d, h, m);
+  if (key === 'dawn') return sun ? new Date(+sun.rise - 15 * 60000) : at(6);
+  if (key === 'dusk') return sun ? new Date(+sun.set - 30 * 60000) : at(20);
+  if (key === 'morning') return at(9); if (key === 'midday') return at(12); if (key === 'afternoon') return at(15); if (key === 'night') return at(22);
+  if (key === 'custom') { const [h, m] = (custom || '06:00').split(':').map(Number); return at(h, m); }
+  return null;
+}
+const planGo = async () => {
+  const mode = $('#plMode .on').dataset.v, key = $('#plTime').value, sp = $('#plSp').value, day = $('#plDay').value, custom = $('#plCustom').value;
+  LS.set('plan', { mode, time: key, sp, custom });
+  const out = $('#plOut'); out.innerHTML = '<p>Working it out…</p>';
+  const centre = [174.85, -41.0];
+  let when = whenFor(day, key, custom, centre), res, rolled = false;
+  if (key === 'best') {   // try every 30 minutes from 4 am to 10 pm and keep the best spot-and-time
+    const [y, mo, d] = day.split('-').map(Number); let top = null;
+    for (let h = 4; h <= 22; h += 0.5) {
+      const t = nzDate(y, mo, d, Math.floor(h), h % 1 ? 30 : 0); if (+t < Date.now() - 1800e3) continue;
+      const r = await recommend(t, mode, sp); const sc = r.results.slice(0, 3).reduce((a, x) => a + x.score, 0);
+      if (r.results.length && (!top || sc > top.sc)) top = { sc, r, t };
+    }
+    if (!top) { out.innerHTML = '<p>That day has passed or nothing suits. Try another day.</p>'; return; }
+    when = top.t; res = top.r;
+  } else {
+    if (+when < Date.now() - 3600e3) {   // today's time has gone: use the same time tomorrow
+      const nd = nzDayKey(new Date(+nzDate(...day.split('-').map(Number), 12, 0) + 864e5)); when = whenFor(nd, key, custom, centre); rolled = true; $('#plDay').value = nd;
+    }
+    res = await recommend(when, mode, sp);
+  }
+  const top = res.results.slice(0, 3);
+  if (!top.length) { out.innerHTML = `<p class="warnbox">No spot suits ${mode === 'kayak' ? 'a kayak' : 'that'} for ${sp === 'Any' ? 'any species' : sp} then. Try shore fishing, another species or another time.</p>`; return; }
+  const best = top[0].score;
+  const rough = top[0].warn.some(x => /wind|exposed|swell/.test(x));
+  const verdict = best >= 0.55 && !rough ? ['v-ok', 'Good conditions'] : best >= 0.55 ? ['v-restricted', 'Fishable, but check the weather'] : best >= 0.3 ? ['v-restricted', 'Fair: some things against you'] : ['v-no', 'Poor: consider another time'];
+  out.innerHTML = `<div class="verdict ${verdict[0]}"><div><b>${verdict[1]}</b><span>${fmtDay(when)} ${fmtTime(when)}${key === 'best' ? ' is the best time that day' : ''}${rolled ? ' (that time has passed today, so this is tomorrow)' : ''}${res.wx ? '' : ' · no forecast this far out, so wind and swell aren’t included'}</span></div></div>
+    <ol class="plan">${top.map((r, i) => `<li><b>${esc(r.s.n)}</b> <span class="badge">${esc([r.sp].concat(r.also || []).join(', '))}</span><div class="bar"><i style="width:${Math.round(Math.min(1, r.score / Math.max(best, 0.01)) * 100)}%"></i></div>
+      <span class="sub">✓ ${r.why.map(esc).join(' · ')}</span>${r.warn.length ? `<br><span class="sub warnTxt">! ${r.warn.map(esc).join(' · ')}</span>` : ''}
+      <div class="btnrow"><button class="btn small" data-act="planShow" data-i="${F.spots.indexOf(r.s)}">Show on map</button><button class="btn small ghost" data-act="tidesAt" data-lng="${r.s.p[0]}" data-lat="${r.s.p[1]}">Tides</button><button class="btn small ghost" data-act="condAt" data-lng="${r.s.p[0]}" data-lat="${r.s.p[1]}">Wind &amp; waves</button></div></li>`).join('')}</ol>
+    <p class="sub">A guide from rules of thumb, not a guarantee. Check the marine forecast and your own judgement before going out.</p>`;
+};
+const planShow = b => { const s = F.spots[+b.dataset.i]; map.easeTo({ center: s.p, zoom: 12.5 }); spotSheet(+b.dataset.i); };
+
 /* ---------------- spots, ramps, rules, safety ---------------- */
 function spotSheet(i) {
   const s = F.spots[i], z = zoneAt(s.p);
@@ -502,6 +658,7 @@ function layersSheet() {
 }
 function menuSheet() {
   showSheet(`<h2>Fish Access NZ</h2><div class="menu">
+    <button data-act="plan"><span>🧭</span><span>Where should I fish?<small>Best spots for your time, boat or shore</small></span></button>
     <button data-act="tides"><span>🌊</span><span>Tides &amp; fishing windows<small>LINZ predictions, tide changes, dawn and dusk</small></span></button>
     <button data-act="cond"><span>💨</span><span>Wind &amp; waves<small>3-day forecast for the selected spot</small></span></button>
     <button data-act="rules"><span>📏</span><span>Rules &amp; limits<small>Sizes, bag limits, closed areas</small></span></button>
@@ -533,7 +690,7 @@ function closeSheet() { sheet.hidden = true; sheetKind = ''; }
 $('#sheetClose').onclick = closeSheet;
 const P = b => [+b.dataset.lng, +b.dataset.lat];
 const actions = {
-  closeSheet, tides: () => tideSheet(), cond: () => condSheet(), rules: rulesSheet, safety: safetySheet, about: aboutSheet, marks: marksList, catchList,
+  closeSheet, plan: planSheet, planGo, planShow, tides: () => tideSheet(), cond: () => condSheet(), rules: rulesSheet, safety: safetySheet, about: aboutSheet, marks: marksList, catchList,
   catchNew: () => catchForm(), spot: b => spotSheet(+b.dataset.i),
   idHere: b => { const p = P(b); map.easeTo({ center: p, zoom: Math.max(map.getZoom(), 12) }); identify(p); },
   tidesAt: b => tideSheet(P(b)), condAt: b => condSheet(P(b)),
@@ -583,6 +740,7 @@ function applyVis() {
 $('#btnLayers').onclick = () => sheetKind === 'layers' && !sheet.hidden ? closeSheet() : layersSheet();
 $('#btnMenu').onclick = () => sheetKind === 'menu' && !sheet.hidden ? closeSheet() : menuSheet();
 $('#btnTide').onclick = () => tideSheet();
+$('#btnPlan').onclick = () => sheetKind === 'plan' && !sheet.hidden ? closeSheet() : planSheet();
 const netChip = $('#netChip'); const net = () => { netChip.textContent = online() ? 'Online' : 'Offline'; netChip.classList.toggle('off', !online()); };
 window.addEventListener('online', net); window.addEventListener('offline', net); net();
 
@@ -590,7 +748,7 @@ window.addEventListener('online', net); window.addEventListener('offline', net);
 function welcome() {
   showSheet(`<h2>Fish Access NZ</h2><p>Tap anywhere on the water to see what you can do there, the tide and nearby spots.</p>
     <ul class="sub"><li><b>Red</b>: Kāpiti Marine Reserve, no fishing</li><li><b>Purple</b>: Cook Strait cable zone, no fishing or anchoring</li><li><b>Amber</b>: Pukerua Bay, hand-held line only</li><li><b>Blue lines</b>: depth contours · <b>grey dashes</b>: where the blue cod limit changes</li><li>🐟 boat spots · 🎣 shore spots · ⚓ ramps</li></ul>
-    <p class="sub">Turn on the location button for live boundary alerts on the water. Currently covers Mana to Kāpiti.</p>
+    <p class="sub">Tap the compass button for <b>Where should I fish?</b>: the best spots for the time you want to go. Turn on the location button for live boundary alerts on the water. Currently covers Mana to Kāpiti.</p>
     <p class="sub">A planning aid, not a chart. Check the NZ Fishing Rules app for the legal rules.</p>
     <div class="btnrow"><button class="btn" data-act="welcomeOk">Got it</button></div>`, { tall: true, kind: 'welcome' });
 }

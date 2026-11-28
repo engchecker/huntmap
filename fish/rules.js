@@ -59,27 +59,47 @@ window.FISH = {
 
   // Hand-picked fishing spots from published reports and guides. Positions are indicative, not GPS marks.
   spots: [
-    { n: 'Mana Island – north end', p: [174.784, -41.071], sp: ['Snapper', 'Kahawai', 'Tarakihi'], when: 'Snapper Dec–Apr', how: 'Burley on the drift or at anchor near the foul. A reliable summer snapper spot in light westerlies.', src: 'fishing.net.nz reports' },
-    { n: 'Mana Island – eastern foul', p: [174.7955, -41.0875], sp: ['Snapper', 'Gurnard', 'Tarakihi', 'Kingfish'], when: 'Summer–autumn', how: 'Drift soft-baits along the edge of the foul on the eastern side.', src: 'Local fishing guides' },
-    { n: 'Mana Island – southern point', p: [174.7825, -41.0985], sp: ['Kingfish', 'Kahawai', 'Snapper'], when: 'Kingfish Jan–Apr when the water is warm', how: 'Slow-troll live baits off the southern point towards Plimmerton. Strong tidal flow.', src: 'Local fishing guides' },
-    { n: 'Plimmerton foul / quarry', p: [174.845, -41.07], sp: ['Snapper', 'John dory', 'Gurnard', 'Blue cod', 'Kahawai'], when: 'Snapper Dec–Apr', how: 'Big snapper have come from here. Fish the edge of the foul with fresh bait on a running rig.', src: 'fishing.net.nz reports' },
-    { n: 'Deep water west of Mana (60–100 m)', p: [174.755, -41.085], sp: ['Hāpuku', 'Bass', 'Tarakihi', 'Trevally', 'Blue cod'], when: 'Year-round on calm days', how: 'Groper and big tarakihi on the edge of the foul in 80–100 m. Use the depth contours to find the edges.', src: 'fishing.net.nz reports' },
-    { n: 'Kāpiti Island – south end', p: [174.907, -40.896], sp: ['Kingfish', 'Tarakihi', 'Blue cod', 'Kahawai'], when: 'Kingfish late summer', how: 'Stay outside the marine reserve: check the red boundary before you drop.', src: 'fishing.net.nz reports' },
-    { n: 'Kāpiti Island – north end (Boulder Bank)', p: [174.905, -40.808], sp: ['Kingfish', 'Tarakihi', 'Blue cod', 'Red cod'], when: 'Kingfish when warm water arrives', how: 'Work the 20–50 m edges for blue cod and tarakihi. Many undersized cod: use bigger hooks.', src: 'fishing.net.nz reports' },
-    { n: 'Rauoterangi Channel – southern end', p: [174.955, -40.905], sp: ['Snapper', 'Gurnard', 'Kahawai'], when: 'Snapper Dec–Mar', how: 'Look for schooling sign on the sounder. Much of the channel to the north is marine reserve.', src: 'fishing.net.nz reports' },
-    { n: 'Paraparaumu / Raumati Beach', p: [174.972, -40.915], sp: ['Kahawai', 'Gurnard', 'Snapper', 'Rig'], when: 'Summer evenings', how: 'Surfcasting on the incoming tide. Beach north of Kāpiti Road borders the marine reserve.', src: 'Kāpiti fishing guides', shore: true },
-    { n: 'Paekākāriki rocks', p: [174.938, -41.003], sp: ['Kahawai', 'Gurnard', 'Blue moki', 'Snapper'], when: 'Summer', how: 'Rock fishing south of the village. Watch the swell.', src: 'Kāpiti fishing guides', shore: true },
-    { n: 'Ōtaki River mouth', p: [175.112, -40.757], sp: ['Kahawai', 'Trevally', 'Yellow-eyed mullet'], when: 'Autumn whitebait runs bring kahawai', how: 'Spin or cast baits into the river current on the outgoing tide.', src: 'Kāpiti fishing guides', shore: true },
-    { n: 'Paremata bridges / harbour entrance', p: [174.8685, -41.0985], sp: ['Kahawai', 'Trevally', 'Snapper', 'Flounder'], when: 'Tide changes', how: 'Strong current: fish the slack. No set nets anywhere in the harbour.', src: 'Local reports', shore: true },
-    { n: 'Titahi Bay', p: [174.8285, -41.1045], sp: ['Kahawai', 'Gurnard', 'Snapper', 'Blue cod'], when: 'Summer', how: 'Shore fishing off the rocks at either end; boats launch off the beach. Blue cod limit changes at Titahi Bay.', src: 'Local reports', shore: true },
-    { n: 'Mākara coast', p: [174.705, -41.215], sp: ['Snapper', 'Blue cod', 'Blue moki', 'Butterfish'], when: 'Big snapper in summer', how: 'Kayak and small-boat spot in calm weather. The Cook Strait cable zone starts further south: no fishing or anchoring there.', src: 'fishing.net.nz / anglersplanet reports' }
+    { n: 'Mana Island – north end', shelter: ['S', 'SE', 'E'], p: [174.784, -41.071], sp: ['Snapper', 'Kahawai', 'Tarakihi'], when: 'Snapper Dec–Apr', how: 'Burley on the drift or at anchor near the foul. A reliable summer snapper spot in light westerlies.', src: 'fishing.net.nz reports' },
+    { n: 'Mana Island – eastern foul', shelter: ['W', 'NW', 'SW'], p: [174.7955, -41.0875], sp: ['Snapper', 'Gurnard', 'Tarakihi', 'Kingfish'], when: 'Summer–autumn', how: 'Drift soft-baits along the edge of the foul on the eastern side.', src: 'Local fishing guides' },
+    { n: 'Mana Island – southern point', shelter: ['N', 'NE'], current: true, p: [174.7825, -41.0985], sp: ['Kingfish', 'Kahawai', 'Snapper'], when: 'Kingfish Jan–Apr when the water is warm', how: 'Slow-troll live baits off the southern point towards Plimmerton. Strong tidal flow.', src: 'Local fishing guides' },
+    { n: 'Plimmerton foul / quarry', shelter: ['E', 'NE', 'SE'], p: [174.845, -41.07], sp: ['Snapper', 'John dory', 'Gurnard', 'Blue cod', 'Kahawai'], when: 'Snapper Dec–Apr', how: 'Big snapper have come from here. Fish the edge of the foul with fresh bait on a running rig.', src: 'fishing.net.nz reports' },
+    { n: 'Deep water west of Mana (60–100 m)', shelter: [], p: [174.755, -41.085], sp: ['Hāpuku', 'Tarakihi', 'Trevally', 'Blue cod'], when: 'Year-round on calm days', how: 'Groper and big tarakihi on the edge of the foul in 80–100 m. Use the depth contours to find the edges.', src: 'fishing.net.nz reports' },
+    { n: 'Kāpiti Island – south end', shelter: ['N', 'NE'], current: true, p: [174.907, -40.896], sp: ['Kingfish', 'Tarakihi', 'Blue cod', 'Kahawai'], when: 'Kingfish late summer', how: 'Stay outside the marine reserve: check the red boundary before you drop.', src: 'fishing.net.nz reports' },
+    { n: 'Kāpiti Island – north end (Boulder Bank)', shelter: ['S', 'SE'], p: [174.905, -40.808], sp: ['Kingfish', 'Tarakihi', 'Blue cod', 'Red cod'], when: 'Kingfish when warm water arrives', how: 'Work the 20–50 m edges for blue cod and tarakihi. Many undersized cod: use bigger hooks.', src: 'fishing.net.nz reports' },
+    { n: 'Rauoterangi Channel – southern end', shelter: ['W', 'NW'], current: true, p: [174.955, -40.905], sp: ['Snapper', 'Gurnard', 'Kahawai'], when: 'Snapper Dec–Mar', how: 'Look for schooling sign on the sounder. Much of the channel to the north is marine reserve.', src: 'fishing.net.nz reports' },
+    { n: 'Paraparaumu / Raumati Beach', shelter: ['E', 'NE', 'SE'], p: [174.972, -40.915], sp: ['Kahawai', 'Gurnard', 'Snapper', 'Rig'], when: 'Summer evenings', how: 'Surfcasting on the incoming tide. Beach north of Kāpiti Road borders the marine reserve.', src: 'Kāpiti fishing guides', shore: true },
+    { n: 'Paekākāriki rocks', shelter: ['E', 'NE', 'SE'], p: [174.938, -41.003], sp: ['Kahawai', 'Gurnard', 'Blue moki', 'Snapper'], when: 'Summer', how: 'Rock fishing south of the village. Watch the swell.', src: 'Kāpiti fishing guides', shore: true },
+    { n: 'Ōtaki River mouth', shelter: ['E', 'NE', 'SE'], current: true, p: [175.112, -40.757], sp: ['Kahawai', 'Trevally', 'Yellow-eyed mullet'], when: 'Autumn whitebait runs bring kahawai', how: 'Spin or cast baits into the river current on the outgoing tide.', src: 'Kāpiti fishing guides', shore: true },
+    { n: 'Paremata bridges / harbour entrance', shelter: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'], current: true, p: [174.8685, -41.0985], sp: ['Kahawai', 'Trevally', 'Snapper', 'Flounder'], when: 'Tide changes', how: 'Strong current: fish the slack. No set nets anywhere in the harbour.', src: 'Local reports', shore: true },
+    { n: 'Titahi Bay', shelter: ['E', 'NE', 'SE'], p: [174.8285, -41.1045], sp: ['Kahawai', 'Gurnard', 'Snapper', 'Blue cod'], when: 'Summer', how: 'Shore fishing off the rocks at either end; boats launch off the beach. Blue cod limit changes at Titahi Bay.', src: 'Local reports', shore: true },
+    { n: 'Mākara coast', shelter: ['N', 'NE', 'E'], p: [174.705, -41.215], sp: ['Snapper', 'Blue cod', 'Blue moki', 'Butterfish'], when: 'Big snapper in summer', how: 'Kayak and small-boat spot in calm weather. The Cook Strait cable zone starts further south: no fishing or anchoring there.', src: 'fishing.net.nz / anglersplanet reports' }
   ],
+
+  // Seasonal and habitat model for the planner: month weights Jan–Dec (1 = peak), typical depth range (m),
+  // and whether night fishing works. General knowledge for the lower North Island; a guide, not a promise.
+  model: {
+    'Snapper':            { m: [1, 1, 1, .8, .4, .2, .1, .1, .2, .4, .7, .9], d: [5, 50], night: true },
+    'Kingfish':           { m: [.9, 1, 1, .8, .4, .1, 0, 0, 0, .1, .3, .6], d: [10, 60] },
+    'Tarakihi':           { m: [.9, .9, .9, .9, .9, .9, .9, .9, .9, .9, .9, .9], d: [20, 150] },
+    'Blue cod':           { m: [.8, .8, .9, .9, 1, 1, 1, 1, .9, .9, .8, .8], d: [10, 80] },
+    'Hāpuku':             { m: [.8, .8, .8, .8, .9, .9, .9, .9, .8, .8, .8, .8], d: [80, 300] },
+    'Kahawai':            { m: [1, 1, 1, .9, .7, .5, .4, .4, .5, .7, .9, 1], d: [0, 30] },
+    'Gurnard':            { m: [.9, .9, .8, .6, .5, .4, .4, .5, .7, .9, 1, 1], d: [3, 40], night: true },
+    'Trevally':           { m: [1, 1, .9, .7, .5, .3, .3, .3, .4, .6, .8, 1], d: [3, 40] },
+    'John dory':          { m: [1, 1, .8, .6, .4, .3, .3, .3, .4, .6, .8, 1], d: [5, 50] },
+    'Blue moki':          { m: [.6, .6, .7, .8, 1, 1, 1, 1, .9, .8, .7, .6], d: [3, 40] },
+    'Butterfish':         { m: [.7, .7, .7, .7, .7, .7, .7, .7, .7, .7, .7, .7], d: [0, 15] },
+    'Red cod':            { m: [.5, .6, .8, 1, 1, .9, .8, .6, .5, .5, .5, .5], d: [10, 100], night: true },
+    'Flounder':           { m: [.7, .7, .7, .7, .7, .7, .7, .7, .7, .7, .7, .7], d: [0, 5], night: true },
+    'Rig':                { m: [1, 1, .8, .5, .3, .2, .2, .3, .5, .8, 1, 1], d: [2, 30], night: true },
+    'Yellow-eyed mullet': { m: [.8, .8, .8, .8, .8, .8, .8, .8, .8, .8, .8, .8], d: [0, 5] }
+  },
 
   // Launch sites (backup list; OpenStreetMap slipways are also shown)
   ramps: [
     { n: 'Mana Cruising Club ramp (Paremata)', p: [174.866, -41.0996], note: 'Inside Porirua Harbour. Check conditions on the harbour-entrance bar before heading out.' },
     { n: 'Plimmerton boat ramp', p: [174.8553, -41.0745], note: 'Exposed to westerly swell.' },
-    { n: 'Titahi Bay', p: [174.8334, -41.1024], note: 'Beach launch.' },
+    { n: 'Titahi Bay', shelter: ['E', 'NE', 'SE'], p: [174.8334, -41.1024], note: 'Beach launch.' },
     { n: 'Pukerua Bay boat ramp', p: [174.8921, -41.0293], note: 'Small ramp for light trailer boats. Follow the channel through the reef (map at the ramp). Hand-held line only inside the bay.' },
     { n: 'Paraparaumu Beach', p: [174.9781, -40.9179], note: 'Beach launch; Kāpiti Boating Club runs a tractor launch. Check the club for launching rules.' }
   ],

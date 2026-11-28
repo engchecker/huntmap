@@ -24,3 +24,6 @@ body.fish .seg button{min-height:44px}
 .menu .menuLink small{display:block;opacity:.7}
 #statusBar[data-cat=restricted] .dot{background:#d99a00}
 .rt td:nth-child(n+2),.rt th:nth-child(n+2){white-space:nowrap}
+.plan{padding-left:20px}.plan li{margin:10px 0;padding-bottom:8px;border-bottom:1px solid var(--sep)}
+.plan .bar{height:6px;border-radius:3px;background:var(--field);margin:6px 0}.plan .bar i{display:block;height:100%;border-radius:3px;background:#1f9d55}
+.warnTxt{color:#b45309}
