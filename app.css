@@ -153,3 +153,6 @@ select option{background:var(--card);color:var(--cardInk)}
   .rp-img{max-width:300px}
   a{color:#111}
 }
+
+.menu .menuLink{display:flex;gap:12px;align-items:center;padding:10px 4px;color:inherit;text-decoration:none;min-height:44px}
+.menu .menuLink small{display:block;opacity:.7}

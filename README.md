@@ -65,6 +65,12 @@ The app is a set of static files. It needs to be served over **https** for GPS a
 
 Netlify Drop (app.netlify.com/drop) also works: drag the folder in and you get an https link instantly.
 
+## Fish Access NZ (fish/)
+
+A sister app for sea fishing at https://engchecker.github.io/huntmap/fish/, starting with Mana and Kāpiti. Tap the water for what applies there (marine reserve, cable protection zone, Pukerua Bay hand-line area, blue cod limit by fishery area), chart depth, tide and nearby spots. Also: LINZ tide tables with fishing windows, Open-Meteo wind and wave forecast, boundary alerts on GPS, marks with GPX export, and a catch log that counts you against the daily limits.
+
+Rules, spots and ramps are in `fish/rules.js`. Boundaries, depth areas, slipways and tide tables are fetched into `fish/data/` by the *Fishing map data* GitHub Action (run it from the Actions tab to refresh).
+
 ## Android app
 
 `app/` packages this web app as a native Android app with Capacitor. Each push to `main` builds a test APK, published under Releases. Service keys live in `config.js`. See `app/STORE-CHECKLIST.md` for the path to Google Play and the App Store.

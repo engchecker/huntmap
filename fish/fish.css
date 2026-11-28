@@ -1,0 +1,26 @@
+/* Fish Access NZ: overrides on the shared Hunt Access stylesheet. Deep sea blue ground, same blaze accent. */
+body.fish{--bush:#0f2a3d;--bush2:#17405c}
+#topbar .title{flex:1;display:flex;flex-direction:column;justify-content:center;padding:6px 14px;border-radius:12px;background:var(--bush);color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);line-height:1.15}
+#topbar .title small{opacity:.75;font-size:12px}
+#topbar{display:flex;gap:8px;align-items:stretch}
+.fpin{border:0;background:none;padding:0;cursor:pointer;font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+.fpin span{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:#ff6a13;border:2px solid #fff;font-size:15px}
+.fpin.spot span{background:#ff6a13}.fpin.shore span{background:#c2410c}.fpin.ramp span{background:#0d9488}.fpin.mark span{background:#1d4ed8}
+body.fish .seg button{min-height:44px}
+.me{width:18px;height:18px;border-radius:50%;background:#1d4ed8;border:3px solid #fff;box-shadow:0 0 0 2px rgba(29,78,216,.35)}
+.linkish{background:none;border:0;padding:0;color:inherit;text-align:left;font:inherit;text-decoration:underline;cursor:pointer}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:8px 0}.kv dt{font-weight:600}.kv dd{margin:0}
+.tt,.fc,.rt{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0}
+.tt th,.tt td,.fc th,.fc td,.rt th,.rt td{padding:6px 4px;border-bottom:1px solid var(--sep,rgba(127,127,127,.25));text-align:left;vertical-align:top}
+.tt th{white-space:nowrap}
+.fc tr.r-ok td:first-child{box-shadow:inset 4px 0 #1f9d55}.fc tr.r-meh td:first-child{box-shadow:inset 4px 0 #d99a00}.fc tr.r-bad td:first-child{box-shadow:inset 4px 0 #d23a2b}
+.fc td:first-child{padding-left:8px;white-space:nowrap}
+.arr{display:inline-block;font-weight:700}
+.dotk{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 3px 0 6px;vertical-align:-1px}.dotk.ok{background:#1f9d55}.dotk.meh{background:#d99a00}.dotk.bad{background:#d23a2b}
+.tidesvg{width:100%;height:auto;color:var(--cardInk);margin:6px 0}
+.badge.bad{background:#d23a2b;color:#fff}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.menu .menuLink{display:flex;gap:12px;align-items:center;padding:10px 4px;color:inherit;text-decoration:none}
+.menu .menuLink small{display:block;opacity:.7}
+#statusBar[data-cat=restricted] .dot{background:#d99a00}
+.rt td:nth-child(n+2),.rt th:nth-child(n+2){white-space:nowrap}

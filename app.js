@@ -1221,6 +1221,7 @@ function menuSheet() {
     <button data-act="mTrip"><span>🧭</span><span>Trip intentions &amp; check-in<small>Text your plan; overdue reminder</small></span></button>
     <button data-act="mCond"><span>🌬</span><span>Wind, scent &amp; sun<small>Wind forecast, scent cone, first and last light</small></span></button>
     ${isInstalled() ? '' : '<button data-act="mInstall"><span>📲</span><span>Install as an app<small>Home-screen icon, full screen, best offline</small></span></button>'}
+    <a class="menuLink" href="fish/"><span>🐟</span><span>Fish Access NZ<small>The sea-fishing map: reserves, tides, spots</small></span></a>
     <button data-act="mSettings"><span>⚙</span><span>Settings &amp; help<small>Map key, alerts, data sources, disclaimer</small></span></button></div>`, { kind: 'menu' });
 }
 actions.mAccess = () => accessList();

@@ -1,5 +1,5 @@
 /* Hunt Access NZ service worker: app shell + map tile caching for offline use. */
-const SHELL = 'shell-v23';
+const SHELL = 'shell-v24';
 // Tile caches: 'tiles-v1' holds tiles saved via "Offline maps" (written by app.js); RT holds tiles seen while browsing.
 const RT = 'tiles-rt';         // tiles seen while browsing (trimmed)
 const RT_MAX = 4000;
