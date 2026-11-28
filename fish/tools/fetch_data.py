@@ -213,6 +213,28 @@ def linz_hydro():
 
 tryit('linz_hydro', linz_hydro)
 
+
+# DOC SeaSketch (keyless): look for chart soundings and contours alongside the depth areas
+def seasketch():
+    root = 'https://seasketch.doc.govt.nz/arcgis/rest/services'
+    found = []
+    folders = json.loads(get(root + '?f=json')).get('folders', [])
+    for fo in folders:
+        try: svcs = json.loads(get(f'{root}/{fo}?f=json')).get('services', [])
+        except Exception: continue
+        for sv in svcs:
+            if sv.get('type') != 'MapServer': continue
+            try: meta = json.loads(get(f"{root}/{sv['name']}/MapServer/layers?f=json"))
+            except Exception: continue
+            for L in meta.get('layers', []):
+                nm = L.get('name', '')
+                if L.get('type') == 'Feature Layer' and any(k in nm.lower() for k in ('sound', 'contour', 'depth', 'bathy', 'rock', 'wreck', 'obstruction')):
+                    found.append(f"{sv['name']}/{L['id']} {nm} [{L.get('geometryType')}]")
+    log['seasketch_candidates'] = found
+
+
+tryit('seasketch', seasketch)
+
 log['_fetched'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 log['_bbox'] = BBOX
 with open(os.path.join(OUT, 'manifest.json'), 'w') as f:
