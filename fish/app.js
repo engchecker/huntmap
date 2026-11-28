@@ -149,12 +149,14 @@ function rampList() {
 /* ---------------- data ---------------- */
 async function loadData() {
   const get = async f => { try { const r = await fetchT('data/' + f, 20000); return r.ok ? await r.json() : null; } catch { return null; } };
-  const [res, cpz, slips, fma, man, darea, snd, cont] = await Promise.all(['reserves.geojson', 'cpz.geojson', 'slipways.geojson', 'fma.geojson', 'manifest.json', 'deptharea.geojson', 'soundings.geojson', 'contours.geojson'].map(get));
+  const [res, cpz, slips, fma, man, darea, snd, cont, dfine] = await Promise.all(['reserves.geojson', 'cpz.geojson', 'slipways.geojson', 'fma.geojson', 'manifest.json', 'deptharea.geojson', 'soundings.geojson', 'contours.geojson', 'deptharea_fine.geojson'].map(get));
   // LINZ chart soundings (spot depths) and 1:22k–1:90k contours, when the data job has them
   state.data.soundings = snd ? { type: 'FeatureCollection', features: snd.features.map(f => ({ type: 'Feature', geometry: f.geometry.type === 'MultiPoint' ? { type: 'Point', coordinates: f.geometry.coordinates[0] } : f.geometry, properties: { d: depthOf(f.properties) } })).filter(f => f.properties.d != null && f.geometry.type === 'Point') } : null;
   // chart depth areas come at three scales that overlap: rank 0 = 1:22k–90k (best). Coarser ones draw first, finer on top.
   const rank = s => /1_22k/.test(s) ? 0 : /1_90k___1_350k/.test(s) ? 1 : 2;
-  state.data.darea = darea ? { type: 'FeatureCollection', features: darea.features.filter(f => f.properties.DRVAL1 >= 0).map(f => ({ type: 'Feature', geometry: f.geometry, properties: { a: f.properties.DRVAL1, b: f.properties.DRVAL2, r: rank(f.properties.Source || '') } })).sort((x, y) => y.properties.r - x.properties.r) } : null;
+  // LINZ 1:4k–1:22k harbour-scale depth areas (rank -1) beat everything else where they exist
+  const fine = dfine ? dfine.features.filter(f => f.properties.drval1 >= 0).map(f => ({ type: 'Feature', geometry: f.geometry, properties: { a: f.properties.drval1, b: f.properties.drval2, r: -1 } })) : [];
+  state.data.darea = darea || fine.length ? { type: 'FeatureCollection', features: (darea ? darea.features : []).filter(f => f.properties.DRVAL1 >= 0).map(f => ({ type: 'Feature', geometry: f.geometry, properties: { a: f.properties.DRVAL1, b: f.properties.DRVAL2, r: rank(f.properties.Source || '') } })).concat(fine).sort((x, y) => y.properties.r - x.properties.r) } : null;
   state.data.reserves = res; state.data.cpz = cpz; state.data.slipways = slips; state.data.fma = fma; state.data.fmaLines = fma ? fmaBoundaries(fma) : null;
   const layers = (man && man.depth_layers) || [];
   const depthFs = [];
@@ -516,7 +518,7 @@ function aboutSheet() {
     <li>Basemaps: Toitū Te Whenua LINZ, CC BY 4.0. Tide predictions: LINZ, CC BY 4.0.</li>
     <li>Kāpiti Marine Reserve: Department of Conservation, CC BY 4.0.</li>
     <li>Cook Strait Cable Protection Zone: Greater Wellington Regional Council.</li>
-    <li>Depth contours: NIWA, from LINZ nautical chart data. Not for navigation.</li>
+    <li>Depths, soundings and contours: Toitū Te Whenua LINZ nautical chart data (CC BY 4.0), with NIWA offshore contours. Not for navigation.</li>
     <li>Fishery area boundaries: Fisheries New Zealand (MPI) via NIWA.</li>
     <li>Boat ramps: © OpenStreetMap contributors (ODbL).</li>
     <li>${METEO_CREDIT}, CC BY 4.0.</li>

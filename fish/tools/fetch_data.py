@@ -232,8 +232,10 @@ def lds():
                                         'bbox': f'{BBOX[1]},{BBOX[0]},{BBOX[3]},{BBOX[2]},urn:ogc:def:crs:EPSG::4326'})
             j = json.loads(get(f'https://data.linz.govt.nz/services;key={key}/wfs?{q}'))
             fs = j.get('features', [])
+            keep = ('depth', 'valdco', 'drval1', 'drval2', 'sordat')
             for f in fs:
                 f.pop('id', None)
+                f['properties'] = {k: v for k, v in (f.get('properties') or {}).items() if k in keep}
             save(nm, fs, f'LINZ Data Service layer {lid} (CC BY 4.0)')
         tryit(nm, go)
 
