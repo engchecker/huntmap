@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python fish/tools/fetch_data.py
+        env:
+          LINZ_LDS_KEY: ${{ secrets.LINZ_LDS_KEY }}
       - name: Commit data
         run: |
           git config user.name "github-actions[bot]"

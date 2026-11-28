@@ -105,11 +105,14 @@ map.on('error', e => { if (!styleErr && /style|401|403/i.test(String(e && e.erro
 function setSrc(id, data) { const s = map.getSource(id); if (s) s.setData(data); }
 function addLayers() {
   const add = (id, data) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data || EMPTY }); };
-  add('darea', state.data.darea); add('depth', state.data.depth); add('fma', state.data.fmaLines); add('reserves', state.data.reserves); add('cpz', state.data.cpz); add('zones', zonesFC);
+  add('darea', state.data.darea); add('snd', state.data.soundings); add('depth', state.data.depth); add('fma', state.data.fmaLines); add('reserves', state.data.reserves); add('cpz', state.data.cpz); add('zones', zonesFC);
   add('sel', EMPTY); add('acc', EMPTY);
   const L = (o, vis) => { if (!map.getLayer(o.id)) map.addLayer(o); map.setLayoutProperty(o.id, 'visibility', vis ? 'visible' : 'none'); };
   L({ id: 'darea-fill', type: 'fill', source: 'darea', paint: { 'fill-color': ['interpolate', ['linear'], ['get', 'a'], 0, '#cfe8f7', 10, '#9fcbe8', 30, '#6aa6d4', 100, '#3d7bb5', 200, '#24527f'], 'fill-opacity': 0.35 } }, state.vis.depth);
   L({ id: 'depth-line', type: 'line', source: 'depth', paint: { 'line-color': '#2f6fb0', 'line-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.35, 12, 0.7], 'line-width': ['case', ['==', ['%', ['coalesce', ['get', 'd'], 1], 50], 0], 1.4, 0.7] } }, state.vis.depth);
+  // spot depths as numbers, in the basemap's own font, from zoom 12
+  const font = (map.getStyle().layers.find(l => l.layout && l.layout['text-font']) || { layout: { 'text-font': ['Open Sans Regular'] } }).layout['text-font'];
+  L({ id: 'snd', type: 'symbol', source: 'snd', minzoom: 12, layout: { 'text-field': ['number-format', ['get', 'd'], { 'max-fraction-digits': 1 }], 'text-font': font, 'text-size': 11, 'text-allow-overlap': false }, paint: { 'text-color': '#1e4f7a', 'text-halo-color': '#fff', 'text-halo-width': 1.2 } }, state.vis.depth);
   L({ id: 'fma-line', type: 'line', source: 'fma', paint: { 'line-color': '#6b7280', 'line-width': 1.5, 'line-dasharray': [4, 3] } }, state.vis.fma);
   L({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': '#d99a00', 'fill-opacity': 0.25 } }, state.vis.zones);
   L({ id: 'zones-line', type: 'line', source: 'zones', paint: { 'line-color': '#b07d00', 'line-width': 2 } }, state.vis.zones);
@@ -146,24 +149,27 @@ function rampList() {
 /* ---------------- data ---------------- */
 async function loadData() {
   const get = async f => { try { const r = await fetchT('data/' + f, 20000); return r.ok ? await r.json() : null; } catch { return null; } };
-  const [res, cpz, slips, fma, man, darea] = await Promise.all(['reserves.geojson', 'cpz.geojson', 'slipways.geojson', 'fma.geojson', 'manifest.json', 'deptharea.geojson'].map(get));
+  const [res, cpz, slips, fma, man, darea, snd, cont] = await Promise.all(['reserves.geojson', 'cpz.geojson', 'slipways.geojson', 'fma.geojson', 'manifest.json', 'deptharea.geojson', 'soundings.geojson', 'contours.geojson'].map(get));
+  // LINZ chart soundings (spot depths) and 1:22k–1:90k contours, when the data job has them
+  state.data.soundings = snd ? { type: 'FeatureCollection', features: snd.features.map(f => ({ type: 'Feature', geometry: f.geometry.type === 'MultiPoint' ? { type: 'Point', coordinates: f.geometry.coordinates[0] } : f.geometry, properties: { d: depthOf(f.properties) } })).filter(f => f.properties.d != null && f.geometry.type === 'Point') } : null;
   // chart depth areas come at three scales that overlap: rank 0 = 1:22k–90k (best). Coarser ones draw first, finer on top.
   const rank = s => /1_22k/.test(s) ? 0 : /1_90k___1_350k/.test(s) ? 1 : 2;
   state.data.darea = darea ? { type: 'FeatureCollection', features: darea.features.filter(f => f.properties.DRVAL1 >= 0).map(f => ({ type: 'Feature', geometry: f.geometry, properties: { a: f.properties.DRVAL1, b: f.properties.DRVAL2, r: rank(f.properties.Source || '') } })).sort((x, y) => y.properties.r - x.properties.r) } : null;
   state.data.reserves = res; state.data.cpz = cpz; state.data.slipways = slips; state.data.fma = fma; state.data.fmaLines = fma ? fmaBoundaries(fma) : null;
   const layers = (man && man.depth_layers) || [];
   const depthFs = [];
+  if (cont) for (const f of cont.features) { const d = depthOf(f.properties); if (d != null) depthFs.push({ type: 'Feature', geometry: f.geometry, properties: { d } }); }
   for (const nm of layers) {
     const fc = await get(nm + '.geojson'); if (!fc) continue;
     for (const f of fc.features) { const d = depthOf(f.properties); if (d != null) { f.properties = { d }; depthFs.push(f); } }
   }
   state.data.depth = depthFs.length ? { type: 'FeatureCollection', features: depthFs } : null;
   if (map.isStyleLoaded()) addLayers();
-  for (const k of ['reserves', 'cpz', 'depth', 'darea']) setSrc(k, state.data[k] || EMPTY); setSrc('fma', state.data.fmaLines || EMPTY);
+  for (const k of ['reserves', 'cpz', 'depth', 'darea']) setSrc(k, state.data[k] || EMPTY); setSrc('snd', state.data.soundings || EMPTY); setSrc('fma', state.data.fmaLines || EMPTY);
   renderPins();
 }
 function depthOf(p) {
-  for (const [k, v] of Object.entries(p || {})) if (/^(valdco|depth|contour|drval1|elevation|elev)$/i.test(k) && v != null && !isNaN(+v)) return Math.abs(+v);
+  for (const [k, v] of Object.entries(p || {})) if (/^(valdco|valsou|depth|contour|drval1|elevation|elev)$/i.test(k) && v != null && !isNaN(+v)) return Math.abs(+v);
   return null;
 }
 
@@ -204,9 +210,12 @@ function fmaBoundaries(fc) {
   return { type: 'FeatureCollection', features: lines.length ? [{ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } }] : [] };
 }
 function depthAt(p) {
+  let sn = null, sd = 250;   // nearest charted spot depth within 250 m
+  for (const f of (state.data.soundings || EMPTY).features) { const m = distM(p, f.geometry.coordinates); if (m < sd) { sd = m; sn = f.properties.d; } }
   let hit = null;   // finest-scale depth area containing the point
   for (const f of (state.data.darea || EMPTY).features) if ((!hit || f.properties.r < hit.properties.r) && inPoly(p, f.geometry)) hit = f;
-  if (hit) return { band: `${hit.properties.a}–${hit.properties.b} m`, d: hit.properties.a, off: 0 };
+  if (hit) return { band: `${hit.properties.a}–${hit.properties.b} m`, d: hit.properties.a, off: 0, spot: sn, spotOff: sd };
+  if (sn != null) return { d: sn, off: sd, spot: sn, spotOff: sd };
   let best = null, bd = 1500;
   for (const f of (state.data.depth || EMPTY).features) { const d = lineDist(p, f.geometry); if (d < bd) { bd = d; best = f.properties.d; } }
   return best == null ? null : { d: best, off: bd };
@@ -238,7 +247,7 @@ function identify(p) {
     ${near.map(n => `<p class="warnbox">${n.kind === 'reserve' ? 'Marine reserve' : n.kind === 'cpz' ? 'Cable protection zone' : esc(n.name)} boundary ${fmtDist(n.d)} away. Watch your drift.</p>`).join('')}
     <dl class="kv">
       <dt>Blue cod</dt><dd>${esc(bc.label)}${bc.approx ? ' (boundary approximate)' : ''}</dd>
-      <dt>Depth</dt><dd>${dep ? (dep.band ? `${dep.band} (chart depth area)` : `near the ${dep.d} m contour, ${fmtDist(dep.off)} away`) : 'No depth data here'} <span class="sub">(not for navigation)</span></dd>
+      <dt>Depth</dt><dd>${dep ? (dep.band ? `${dep.band} (chart depth area)` : `near the ${dep.d} m contour, ${fmtDist(dep.off)} away`) + (dep.spot != null ? `; charted ${dep.spot} m sounding ${fmtDist(dep.spotOff)} away` : '') : 'No depth data here'} <span class="sub">(not for navigation)</span></dd>
       <dt>Tide</dt><dd id="idTide">Loading ${esc(st.n)}…</dd>
     </dl>
     ${sp.length ? `<h3>Nearby spots</h3><ul class="list">${sp.map(s => `<li><button class="linkish" data-act="spot" data-i="${s.i}"><span class="t">${esc(s.n)}</span></button> · ${fmtDist(s.dist)}<br><span class="sub">${esc(s.sp.join(', '))}</span></li>`).join('')}</ul>` : ''}
@@ -565,7 +574,7 @@ sheetBody.addEventListener('change', e => {
 });
 sheetBody.addEventListener('click', e => { const b = e.target.closest('[data-base]'); if (!b) return; state.base = b.dataset.base; LS.set('base', state.base); map.setStyle(styleFor(state.base)); layersSheet(); });
 function applyVis() {
-  const m = { reserves: ['res-fill', 'res-line'], cpz: ['cpz-fill', 'cpz-line'], zones: ['zones-fill', 'zones-line'], depth: ['depth-line', 'darea-fill'], fma: ['fma-line'] };
+  const m = { reserves: ['res-fill', 'res-line'], cpz: ['cpz-fill', 'cpz-line'], zones: ['zones-fill', 'zones-line'], depth: ['depth-line', 'darea-fill', 'snd'], fma: ['fma-line'] };
   for (const [k, ids] of Object.entries(m)) ids.forEach(id => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', state.vis[k] ? 'visible' : 'none'));
   renderPins();
 }

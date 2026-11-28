@@ -81,8 +81,12 @@ def tryit(name, fn):
     try:
         fn()
     except Exception as e:
-        log[name] = {'error': str(e)[:300]}
-        print('FAIL', name, e)
+        msg = str(e)
+        k = os.environ.get('LINZ_LDS_KEY', '')
+        if k:
+            msg = msg.replace(k, '***')   # never write the key into the manifest or the log
+        log[name] = {'error': msg[:300]}
+        print('FAIL', name, msg)
 
 
 os.makedirs(OUT, exist_ok=True)
@@ -214,26 +218,27 @@ def linz_hydro():
 tryit('linz_hydro', linz_hydro)
 
 
-# DOC SeaSketch (keyless): look for chart soundings and contours alongside the depth areas
-def seasketch():
-    root = 'https://seasketch.doc.govt.nz/arcgis/rest/services'
-    found = []
-    folders = json.loads(get(root + '?f=json')).get('folders', [])
-    for fo in folders:
-        try: svcs = json.loads(get(f'{root}/{fo}?f=json')).get('services', [])
-        except Exception: continue
-        for sv in svcs:
-            if sv.get('type') != 'MapServer': continue
-            try: meta = json.loads(get(f"{root}/{sv['name']}/MapServer/layers?f=json"))
-            except Exception: continue
-            for L in meta.get('layers', []):
-                nm = L.get('name', '')
-                if L.get('type') == 'Feature Layer' and any(k in nm.lower() for k in ('sound', 'contour', 'depth', 'bathy', 'rock', 'wreck', 'obstruction')):
-                    found.append(f"{sv['name']}/{L['id']} {nm} [{L.get('geometryType')}]")
-    log['seasketch_candidates'] = found
+# LINZ Data Service chart layers (needs the LINZ_LDS_KEY repository secret; skipped without it)
+def lds():
+    key = os.environ.get('LINZ_LDS_KEY', '').strip()
+    if not key:
+        log['lds'] = 'skipped: no LINZ_LDS_KEY secret'
+        return
+    layers = {'soundings': 50866, 'contours': 50554, 'deptharea_fine': 50671}   # Hydro 1:22k-1:90k soundings and contours; depth areas 1:4k-1:22k
+    for nm, lid in layers.items():
+        def go(nm=nm, lid=lid):
+            q = urllib.parse.urlencode({'service': 'WFS', 'version': '2.0.0', 'request': 'GetFeature', 'typeNames': f'layer-{lid}',
+                                        'outputFormat': 'json', 'srsName': 'EPSG:4326',
+                                        'bbox': f'{BBOX[1]},{BBOX[0]},{BBOX[3]},{BBOX[2]},urn:ogc:def:crs:EPSG::4326'})
+            j = json.loads(get(f'https://data.linz.govt.nz/services;key={key}/wfs?{q}'))
+            fs = j.get('features', [])
+            for f in fs:
+                f.pop('id', None)
+            save(nm, fs, f'LINZ Data Service layer {lid} (CC BY 4.0)')
+        tryit(nm, go)
 
 
-tryit('seasketch', seasketch)
+tryit('lds', lds)
 
 log['_fetched'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 log['_bbox'] = BBOX
